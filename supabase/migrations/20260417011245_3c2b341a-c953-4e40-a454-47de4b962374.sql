@@ -1,0 +1,1 @@
+ALTER TYPE public.sku_availability ADD VALUE IF NOT EXISTS 'on_event';

@@ -1,0 +1,1 @@
+ALTER TABLE public.skus ADD CONSTRAINT skus_sku_code_key UNIQUE (sku_code);
