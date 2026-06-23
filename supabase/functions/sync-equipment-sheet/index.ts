@@ -81,9 +81,7 @@ async function fetchAllTabs(
       const config = lookupTabConfig(name) ?? deriveTabConfig(name, gid);
       return { name, gid, ...config };
     })
-    .filter(
-      (t) => t.name !== "" && !SKIP_TABS.has(t.name) && !t.name.toLowerCase().startsWith("copy of"),
-    );
+    .filter((t) => t.name !== "" && !SKIP_TABS.has(t.name));
 }
 
 function parseCSV(text: string): string[][] {
@@ -131,31 +129,32 @@ function normalizeCell(raw: unknown): string {
 
 const HEADER_IDENT_RE = /^(no\.?|sku|#)$/i;
 
-// Returns header row index + soft warnings if the tab looks like an inventory
-// sheet; returns null if no recognisable inventory header is found (skip tab).
-function detectInventoryHeader(
-  rows: string[][],
-  tabName: string,
-): { headerRowIdx: number; warnings: string[] } | null {
-  let headerRowIdx = -1;
-  for (let i = 0; i < Math.min(rows.length, 5); i++) {
-    if ([0, 1, 2].some((col) => HEADER_IDENT_RE.test(normalizeCell(rows[i][col] ?? "")))) {
-      headerRowIdx = i;
-      break;
-    }
+// Scans ALL rows (no row-count cap) for a header that looks like an inventory
+// table. Returns the index of the first data row (header row + 1). If no
+// recognisable header is found, falls back to the first row that contains an
+// "EQ-" coded cell, or row 1 as a last resort — never skips the tab.
+function findDataStart(rows: string[][]): number {
+  // Pass 1 — look for a row that reads like an inventory header.
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const isHeader = row.some((cell) => {
+      const c = normalizeCell(cell);
+      return (
+        HEADER_IDENT_RE.test(c) ||
+        c === "sku" ||
+        LOC_KEYWORDS.some((k) => c.includes(k)) ||
+        c.includes("name") ||
+        c.includes("ชื่อ")
+      );
+    });
+    if (isHeader) return i + 1;
   }
-  if (headerRowIdx < 0) return null;
-
-  const headerRow = rows[headerRowIdx];
-  const warnings: string[] = [];
-  const hasName = headerRow.some((c) => {
-    const n = normalizeCell(c);
-    return n.includes("ชื่อ") || n.includes("name");
-  });
-  if (!hasName) warnings.push(`Name column missing (${tabName})`);
-  const hasLoc = headerRow.some((c) => LOC_KEYWORDS.some((k) => normalizeCell(c).includes(k)));
-  if (!hasLoc) warnings.push(`Location column missing (${tabName})`);
-  return { headerRowIdx, warnings };
+  // Pass 2 — no header found; look for the first row containing an EQ- SKU.
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].some((cell) => /^EQ-/i.test((cell ?? "").trim()))) return i;
+  }
+  // Fallback: assume row 0 is a title/junk row; start data at row 1.
+  return 1;
 }
 
 Deno.serve(async (req) => {
@@ -271,21 +270,7 @@ Deno.serve(async (req) => {
         const csv = await res.text();
         const rows = parseCSV(csv);
 
-        let dataStart = 0;
-        if (tab.schema === "standard") {
-          if (rows.length < 1) {
-            console.log(`[SKIP] ${tab.name}: empty tab`);
-            continue;
-          }
-          const hd = detectInventoryHeader(rows, tab.name);
-          if (!hd) {
-            console.log(`[SKIP] ${tab.name}: no inventory header found`);
-            continue;
-          }
-          for (const w of hd.warnings) console.warn(`[COLUMN-WARN] ${w}`);
-          dataStart = hd.headerRowIdx + 1;
-        }
-
+        const dataStart = tab.schema === "standard" ? findDataStart(rows) : 0;
         tabData.push({ tab, rows, dataStart });
       } catch (tabErr) {
         errors.push(`[ERROR] ${tab.name}: ${tabErr instanceof Error ? tabErr.message : String(tabErr)}`);
