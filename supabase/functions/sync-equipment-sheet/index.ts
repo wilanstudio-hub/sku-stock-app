@@ -129,41 +129,33 @@ function normalizeCell(raw: unknown): string {
   return String(raw ?? "").replace(/[­​‌‍⁠﻿]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-/**
- * Validates the standard-schema header row against the template blueprint.
- * Returns an error string on mismatch, null if the structure looks acceptable.
- * Matching is case-insensitive and scans the full header row so minor column
- * shifts (e.g. the Lighting tab) do not produce false negatives.
- */
-function validateStandardHeader(rows: string[][], tabName: string): string | null {
-  // Accept "No." anywhere in the first three columns (handles merged-cell offsets).
-  const headerRow = rows.find((r) =>
-    [0, 1, 2].some((i) => /^no\.?$/i.test(normalizeCell(r[i])))
-  );
-  if (!headerRow) {
-    // No recognisable header — nothing to validate.
-    return null;
-  }
+const HEADER_IDENT_RE = /^(no\.?|sku|#)$/i;
 
-  // Name keyword: scan the entire header row, not just the fixed index.
-  const nameOk = headerRow.some((cell) => {
-    const c = normalizeCell(cell);
-    return c.includes("ชื่อ") || c.includes("name");
+// Returns header row index + soft warnings if the tab looks like an inventory
+// sheet; returns null if no recognisable inventory header is found (skip tab).
+function detectInventoryHeader(
+  rows: string[][],
+  tabName: string,
+): { headerRowIdx: number; warnings: string[] } | null {
+  let headerRowIdx = -1;
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    if ([0, 1, 2].some((col) => HEADER_IDENT_RE.test(normalizeCell(rows[i][col] ?? "")))) {
+      headerRowIdx = i;
+      break;
+    }
+  }
+  if (headerRowIdx < 0) return null;
+
+  const headerRow = rows[headerRowIdx];
+  const warnings: string[] = [];
+  const hasName = headerRow.some((c) => {
+    const n = normalizeCell(c);
+    return n.includes("ชื่อ") || n.includes("name");
   });
-  if (!nameOk) {
-    return `โครงสร้างคอลัมน์ไม่ตรงตาม Template มาตรฐาน กรุณาตรวจสอบตำแหน่งช่อง ชื่อ/Name (แท็บ: ${tabName})`;
-  }
-
-  // Location keyword: scan the entire header row for any recognised keyword.
-  const locOk = headerRow.some((cell) => {
-    const c = normalizeCell(cell);
-    return LOC_KEYWORDS.some((k) => c.includes(k));
-  });
-  if (!locOk) {
-    return `โครงสร้างคอลัมน์ไม่ตรงตาม Template มาตรฐาน กรุณาตรวจสอบตำแหน่งช่อง Location (แท็บ: ${tabName})`;
-  }
-
-  return null;
+  if (!hasName) warnings.push(`Name column missing (${tabName})`);
+  const hasLoc = headerRow.some((c) => LOC_KEYWORDS.some((k) => normalizeCell(c).includes(k)));
+  if (!hasLoc) warnings.push(`Location column missing (${tabName})`);
+  return { headerRowIdx, warnings };
 }
 
 Deno.serve(async (req) => {
@@ -266,36 +258,35 @@ Deno.serve(async (req) => {
     if (!apiKey) throw new Error("GOOGLE_SHEETS_API_KEY secret is not set");
     const TABS = await fetchAllTabs(sheetToSync, apiKey);
 
-    // Fetch all tabs. Validation warnings are logged but never skip a tab —
-    // data rows use fixed column positions that remain valid even when a header
-    // label is missing or differently worded. Each tab is wrapped in try/catch
-    // so a broken tab cannot prevent the rest from being processed.
     const errors: string[] = [];
-    const tabData: { tab: typeof TABS[0]; rows: string[][] }[] = [];
+    const tabData: { tab: typeof TABS[0]; rows: string[][]; dataStart: number }[] = [];
     for (const tab of TABS) {
       try {
         const url = `https://docs.google.com/spreadsheets/d/${sheetToSync}/gviz/tq?tqx=out:csv&gid=${tab.gid}`;
         const res = await fetch(url);
         if (!res.ok) {
           errors.push(`[WARN] ${tab.name}: fetch failed (${res.status})`);
-          tabData.push({ tab, rows: [] });
           continue;
         }
         const csv = await res.text();
         const rows = parseCSV(csv);
 
-        if (tab.schema === "standard" && rows.length >= 1) {
-          const headerErr = validateStandardHeader(rows, tab.name);
-          if (headerErr) {
-            // Structural mismatch is informational only — data rows use fixed
-            // positional indices and parse correctly regardless of header labels.
-            // Log to console so it shows in Edge Function logs without polluting
-            // the errors[] array returned to the caller.
-            console.warn(`[COLUMN-WARN] ${headerErr}`);
+        let dataStart = 0;
+        if (tab.schema === "standard") {
+          if (rows.length < 1) {
+            console.log(`[SKIP] ${tab.name}: empty tab`);
+            continue;
           }
+          const hd = detectInventoryHeader(rows, tab.name);
+          if (!hd) {
+            console.log(`[SKIP] ${tab.name}: no inventory header found`);
+            continue;
+          }
+          for (const w of hd.warnings) console.warn(`[COLUMN-WARN] ${w}`);
+          dataStart = hd.headerRowIdx + 1;
         }
 
-        tabData.push({ tab, rows });
+        tabData.push({ tab, rows, dataStart });
       } catch (tabErr) {
         errors.push(`[ERROR] ${tab.name}: ${tabErr instanceof Error ? tabErr.message : String(tabErr)}`);
       }
@@ -323,27 +314,14 @@ Deno.serve(async (req) => {
     const perTab: Record<string, { inserted: number; updated: number }> = {};
     const sheetSkus = new Set<string>();
 
-    for (const { tab, rows } of tabData) {
+    for (const { tab, rows, dataStart } of tabData) {
       try {
       if (rows.length < 2) { perTab[tab.name] = { inserted: 0, updated: 0 }; continue; }
 
       let seq = 0;
       perTab[tab.name] = perTab[tab.name] ?? { inserted: 0, updated: 0 };
 
-      // Detect the actual header row so any metadata rows above it (double-
-      // header layout, e.g. a title/notes row before "No. / Name / Location")
-      // are skipped. Data parsing starts from the row immediately after the
-      // header. Falls back to row 1 if no "No." header is found.
-      const dataStartIdx = tab.schema === "standard"
-        ? (() => {
-            const hIdx = rows.findIndex((r) =>
-              [0, 1, 2].some((col) => /^no\.?$/i.test(normalizeCell(r[col])))
-            );
-            return hIdx >= 0 ? hIdx + 1 : 1;
-          })()
-        : 0;
-
-      for (let r = dataStartIdx; r < rows.length; r++) {
+      for (let r = dataStart; r < rows.length; r++) {
         const row = rows[r];
         if (!row || row.every((c) => !c?.trim())) continue;
 
