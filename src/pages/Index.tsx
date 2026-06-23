@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLang } from "@/hooks/useLang";
 import { supabase } from "@/integrations/supabase/client";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SkuTable } from "@/components/SkuTable";
 import { TransactionHistoryDialog } from "@/components/TransactionHistoryDialog";
 import { LinkSheetDialog } from "@/components/LinkSheetDialog";
+import { cn } from "@/lib/utils";
 import {
   LogIn, LogOut, Package, Clapperboard, Shirt, Camera,
   ShieldCheck, ClipboardList, Plus,
@@ -22,10 +22,20 @@ interface RegisteredSheet {
   sku_prefix: string;
 }
 
+interface TabDef {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  dept: Department;
+  lockedCategory?: string;
+}
+
+const EQ_TAB_PREFIX = "eq:";
+
 const DEPT_ICONS: Record<Department, React.ReactNode> = {
-  art: <Clapperboard className="w-4 h-4" />,
-  wd: <Shirt className="w-4 h-4" />,
-  equipment: <Camera className="w-4 h-4" />,
+  art:       <Clapperboard className="w-3.5 h-3.5 shrink-0" />,
+  wd:        <Shirt        className="w-3.5 h-3.5 shrink-0" />,
+  equipment: <Camera       className="w-3.5 h-3.5 shrink-0" />,
 };
 
 const Index = () => {
@@ -33,10 +43,15 @@ const Index = () => {
   const { lang, setLang, t } = useLang();
   const nav = useNavigate();
   const isAdmin = roles.includes("admin");
+  const tabStripRef = useRef<HTMLDivElement>(null);
 
-  const [txHistoryOpen, setTxHistoryOpen] = useState(false);
-  const [linkSheetOpen, setLinkSheetOpen] = useState(false);
+  const [txHistoryOpen, setTxHistoryOpen]   = useState(false);
+  const [linkSheetOpen, setLinkSheetOpen]   = useState(false);
   const [registeredSheets, setRegisteredSheets] = useState<RegisteredSheet[]>([]);
+  const [equipCategories, setEquipCategories]   = useState<string[]>([]);
+  const [activeTabId, setActiveTabId]           = useState<string>("");
+
+  // ── Data loaders ─────────────────────────────────────────────────────────
 
   const loadRegisteredSheets = async () => {
     const { data } = await supabase
@@ -48,10 +63,89 @@ const Index = () => {
     setRegisteredSheets((data ?? []) as RegisteredSheet[]);
   };
 
+  const loadEquipCategories = async () => {
+    const { data } = await supabase
+      .from("skus")
+      .select("category")
+      .eq("department", "equipment")
+      .not("category", "is", null);
+    if (data) {
+      const cats = Array.from(
+        new Set(data.map((r) => r.category).filter(Boolean) as string[]),
+      ).sort();
+      setEquipCategories(cats);
+    }
+  };
+
   useEffect(() => {
-    if (!user) { setRegisteredSheets([]); return; }
+    if (!user) {
+      setRegisteredSheets([]);
+      setEquipCategories([]);
+      return;
+    }
     loadRegisteredSheets();
+    if (canView("equipment")) loadEquipCategories();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // ── Tab list ─────────────────────────────────────────────────────────────
+
+  const deptLabel: Record<Department, string> = {
+    art: t.tabArt,
+    wd:  t.tabWd,
+    equipment: t.tabEquipment,
+  };
+
+  const allTabs = useMemo<TabDef[]>(() => {
+    const tabs: TabDef[] = [];
+
+    // Non-equipment departments first
+    for (const d of ["art", "wd"] as Department[]) {
+      if (canView(d)) {
+        tabs.push({ id: d, label: deptLabel[d], icon: DEPT_ICONS[d], dept: d });
+      }
+    }
+
+    // One tab per equipment category — mirrors Google Sheet bottom tabs
+    if (canView("equipment")) {
+      for (const cat of equipCategories) {
+        tabs.push({
+          id: `${EQ_TAB_PREFIX}${cat}`,
+          label: cat,
+          icon: DEPT_ICONS.equipment,
+          dept: "equipment",
+          lockedCategory: cat,
+        });
+      }
+    }
+
+    return tabs;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [equipCategories.join("|"), canView("art"), canView("wd"), canView("equipment")]);
+
+  // Set the default active tab once tabs are available; never override a
+  // user-initiated selection.
+  const tabIdsKey = allTabs.map((tb) => tb.id).join("|");
+  useEffect(() => {
+    if (allTabs.length > 0 && !allTabs.find((tb) => tb.id === activeTabId)) {
+      setActiveTabId(allTabs[0].id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabIdsKey]);
+
+  // Scroll the active tab into view when it changes
+  useEffect(() => {
+    if (!tabStripRef.current) return;
+    const el = tabStripRef.current.querySelector<HTMLElement>(`[data-tab="${activeTabId}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }, [activeTabId]);
+
+  // ── Derived state ─────────────────────────────────────────────────────────
+
+  const activeTab = allTabs.find((tb) => tb.id === activeTabId);
+  const mainSheet = registeredSheets.find((s) => s.sku_prefix === "");
+
+  // ── Early returns ─────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -61,35 +155,15 @@ const Index = () => {
     );
   }
 
-  const visibleDepts = (["art", "wd", "equipment"] as Department[]).filter(canView);
-  const deptLabel: Record<Department, string> = {
-    art: t.tabArt,
-    wd: t.tabWd,
-    equipment: t.tabEquipment,
-  };
-
-  // Secondary sheets (non-empty prefix) become their own tabs — visible to any
-  // user who can view the equipment section.
-  const mainSheet = registeredSheets.find((s) => s.sku_prefix === "");
-  const extraSheets = canView("equipment")
-    ? registeredSheets.filter((s) => s.sku_prefix !== "")
-    : [];
-
-  // First available tab key for the Tabs defaultValue.
-  const firstTabKey =
-    visibleDepts.length > 0
-      ? visibleDepts[0]
-      : extraSheets.length > 0
-      ? `sheet:${extraSheets[0].sheet_id}`
-      : "";
-
-  const hasContent = visibleDepts.length > 0 || extraSheets.length > 0;
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-background">
+
+      {/* ── Top header bar ─────────────────────────────────────────────── */}
       <header className="border-b bg-card/50 backdrop-blur sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 shrink-0">
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center"
               style={{ background: "var(--gradient-hero)" }}
@@ -102,7 +176,7 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <button
               onClick={() => setLang(lang === "th" ? "en" : "th")}
               className="text-xs font-mono px-2 py-1 rounded border border-border hover:bg-accent transition-colors"
@@ -147,20 +221,60 @@ const Index = () => {
                 </Button>
               </>
             ) : (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => nav("/auth")}
-                className="gap-2"
-              >
+              <Button variant="default" size="sm" onClick={() => nav("/auth")} className="gap-2">
                 <LogIn className="w-4 h-4" /> {t.signIn}
               </Button>
             )}
           </div>
         </div>
+
+        {/* ── Flat tab strip — mirrors Google Sheet bottom tabs ─────────── */}
+        {user && allTabs.length > 0 && (
+          <div
+            ref={tabStripRef}
+            className="flex overflow-x-auto border-t scrollbar-none"
+            style={{ scrollbarWidth: "none" }}
+          >
+            {allTabs.map((tab) => (
+              <button
+                key={tab.id}
+                data-tab={tab.id}
+                onClick={() => setActiveTabId(tab.id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-2.5 text-sm whitespace-nowrap",
+                  "border-b-2 -mb-px font-medium transition-colors shrink-0 font-th",
+                  activeTabId === tab.id
+                    ? "border-primary text-primary bg-primary/5"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                )}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+
+            {/* Admin-only: register a new Google Sheet as additional tabs */}
+            {isAdmin && canView("equipment") && (
+              <button
+                onClick={() => setLinkSheetOpen(true)}
+                title="เพิ่ม Google Sheet ใหม่เป็นแท็บ"
+                className={cn(
+                  "flex items-center gap-1 px-3 py-2.5 text-sm shrink-0",
+                  "border-b-2 border-transparent border-dashed",
+                  "text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors",
+                )}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">เพิ่มแท็บ</span>
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
+      {/* ── Main content ───────────────────────────────────────────────── */}
       <main className="container mx-auto px-4 py-6">
+
         {!user && (
           <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
             <Package className="w-12 h-12 text-muted-foreground opacity-30" />
@@ -171,7 +285,7 @@ const Index = () => {
           </div>
         )}
 
-        {user && !hasContent && (
+        {user && allTabs.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
             <ShieldCheck className="w-12 h-12 text-muted-foreground opacity-30" />
             <p className="font-medium">{t.noSections}</p>
@@ -179,72 +293,24 @@ const Index = () => {
           </div>
         )}
 
-        {user && hasContent && (
-          <Tabs defaultValue={firstTabKey}>
-            {/* Tab strip: triggers + inline admin "add tab" button in one row */}
-            <div className="flex items-center gap-1.5 mb-6 flex-wrap">
-              <TabsList className="flex flex-wrap h-auto gap-px">
-                {/* Static department tabs */}
-                {visibleDepts.map((dept) => (
-                  <TabsTrigger key={dept} value={dept} className="gap-1.5">
-                    {DEPT_ICONS[dept]} {deptLabel[dept]}
-                  </TabsTrigger>
-                ))}
+        {/* Art / WD: one stable SkuTable instance per department */}
+        {user && activeTab?.dept === "art" && (
+          <SkuTable key="art" department="art" />
+        )}
+        {user && activeTab?.dept === "wd" && (
+          <SkuTable key="wd" department="wd" />
+        )}
 
-                {/* Dynamic tabs — one per secondary registered sheet */}
-                {extraSheets.map((s) => (
-                  <TabsTrigger
-                    key={`sheet:${s.sheet_id}`}
-                    value={`sheet:${s.sheet_id}`}
-                    className="gap-1.5"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    {s.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-
-              {/* Admin-only "add tab" pill — sits flush next to the tab list */}
-              {isAdmin && canView("equipment") && (
-                <button
-                  onClick={() => setLinkSheetOpen(true)}
-                  title="เพิ่ม Google Sheet ใหม่เป็นแท็บ"
-                  className="inline-flex items-center gap-1 h-9 px-3 rounded-md text-sm font-medium border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 hover:bg-accent transition-colors shrink-0 select-none"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">เพิ่มแท็บ</span>
-                </button>
-              )}
-            </div>
-
-            {/* Static department tab content */}
-            {visibleDepts.map((dept) => (
-              <TabsContent key={dept} value={dept}>
-                {dept === "equipment" ? (
-                  // Pass skuPrefix="" so this tab only shows main-warehouse EQ-* items
-                  // when secondary sheets exist as separate tabs.
-                  <SkuTable
-                    department="equipment"
-                    skuPrefix=""
-                    sheetId={mainSheet?.sheet_id}
-                  />
-                ) : (
-                  <SkuTable department={dept} />
-                )}
-              </TabsContent>
-            ))}
-
-            {/* Dynamic sheet tab content */}
-            {extraSheets.map((s) => (
-              <TabsContent key={`sheet:${s.sheet_id}`} value={`sheet:${s.sheet_id}`}>
-                <SkuTable
-                  department="equipment"
-                  skuPrefix={s.sku_prefix}
-                  sheetId={s.sheet_id}
-                />
-              </TabsContent>
-            ))}
-          </Tabs>
+        {/* Equipment: one stable instance; lockedCategory changes on tab switch.
+            The data is loaded once and client-side filtered — no re-fetch when
+            the user switches between equipment category tabs. */}
+        {user && activeTab?.dept === "equipment" && (
+          <SkuTable
+            key="equipment"
+            department="equipment"
+            lockedCategory={activeTab.lockedCategory}
+            sheetId={mainSheet?.sheet_id}
+          />
         )}
       </main>
 
@@ -254,7 +320,7 @@ const Index = () => {
         <LinkSheetDialog
           open={linkSheetOpen}
           onOpenChange={setLinkSheetOpen}
-          onLinked={loadRegisteredSheets}
+          onLinked={() => { loadRegisteredSheets(); loadEquipCategories(); }}
         />
       )}
     </div>

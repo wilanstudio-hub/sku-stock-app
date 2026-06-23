@@ -54,9 +54,12 @@ interface Props {
   skuPrefix?: string;
   /** Sheet ID forwarded to the sync edge function so it targets the right sheet. */
   sheetId?: string;
+  /** When set, locks the category filter to this value, hides the category
+   *  dropdown, and scopes the stats cards to this category only. */
+  lockedCategory?: string;
 }
 
-export const SkuTable = ({ department, skuPrefix, sheetId }: Props) => {
+export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory }: Props) => {
   const { user, canEdit } = useAuth();
   const { t, lang } = useLang();
   const editable = canEdit(department);
@@ -231,14 +234,17 @@ export const SkuTable = ({ department, skuPrefix, sheetId }: Props) => {
   );
 
   useEffect(() => {
-    if (categoryFilter !== "all" && !categories.includes(categoryFilter)) {
+    if (!lockedCategory && categoryFilter !== "all" && !categories.includes(categoryFilter)) {
       setCategoryFilter("all");
     }
-  }, [categories]);
+  }, [categories, lockedCategory]);
+
+  // When a category is locked externally the prop wins; otherwise use the dropdown.
+  const effectiveCategory = lockedCategory ?? categoryFilter;
 
   const filtered = useMemo(() => {
     let r = items;
-    if (categoryFilter !== "all") r = r.filter((i) => (i.category ?? "") === categoryFilter);
+    if (effectiveCategory !== "all") r = r.filter((i) => (i.category ?? "") === effectiveCategory);
     if (q.trim()) {
       const s = q.toLowerCase();
       r = r.filter((i) =>
@@ -250,9 +256,14 @@ export const SkuTable = ({ department, skuPrefix, sheetId }: Props) => {
       );
     }
     return r;
-  }, [items, q, categoryFilter]);
+  }, [items, q, effectiveCategory]);
 
-  const totalQty = items.reduce((a, b) => a + b.quantity, 0);
+  // Stats scope: when a category is locked, metrics reflect only that category.
+  const statsItems = useMemo(
+    () => lockedCategory ? items.filter((i) => (i.category ?? "") === lockedCategory) : items,
+    [items, lockedCategory],
+  );
+  const totalQty = statsItems.reduce((a, b) => a + b.quantity, 0);
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -328,11 +339,11 @@ export const SkuTable = ({ department, skuPrefix, sheetId }: Props) => {
 
   return (
     <div className="space-y-4">
-      {/* Stats */}
+      {/* Stats — scoped to lockedCategory when set */}
       <div className="grid grid-cols-2 gap-3">
         <Card className="p-4">
           <div className="text-xs text-muted-foreground">{t.itemsLabel}</div>
-          <div className="text-2xl font-bold">{items.length}</div>
+          <div className="text-2xl font-bold">{statsItems.length}</div>
         </Card>
         <Card className="p-4">
           <div className="text-xs text-muted-foreground">{t.totalQtyLabel}</div>
@@ -354,17 +365,19 @@ export const SkuTable = ({ department, skuPrefix, sheetId }: Props) => {
             className="pl-9"
           />
         </div>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-full sm:w-52">
-            <SelectValue placeholder={t.categoryCol} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t.allCategories}</SelectItem>
-            {categories.map((c) => (
-              <SelectItem key={c} value={c}>{c}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {!lockedCategory && (
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-full sm:w-52">
+              <SelectValue placeholder={t.categoryCol} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t.allCategories}</SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <QrSheet ref={qrSheetRef} items={filtered} />
         <Button variant="outline" onClick={() => handlePrintLabels()} disabled={filtered.length === 0} className="gap-1">
           <Printer className="w-4 h-4" />
