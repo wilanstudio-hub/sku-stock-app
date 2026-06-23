@@ -57,9 +57,12 @@ interface Props {
   /** When set, locks the category filter to this value, hides the category
    *  dropdown, and scopes the stats cards to this category only. */
   lockedCategory?: string;
+  /** Optional slot rendered between the stats cards and the toolbar row.
+   *  Used by Index.tsx to inject the equipment sub-tab navigation bar. */
+  subNav?: React.ReactNode;
 }
 
-export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory }: Props) => {
+export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNav }: Props) => {
   const { user, canEdit } = useAuth();
   const { t, lang } = useLang();
   const editable = canEdit(department);
@@ -350,6 +353,9 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory }: Pro
           <div className="text-2xl font-bold">{totalQty.toLocaleString()}</div>
         </Card>
       </div>
+
+      {/* Sub-navigation slot — equipment category pills injected from Index.tsx */}
+      {subNav}
 
       {(department === "art" || department === "equipment" || department === "wd") && (
         <SyncStatus department={department} refreshKey={syncRefresh} />

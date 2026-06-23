@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLang } from "@/hooks/useLang";
@@ -22,20 +22,10 @@ interface RegisteredSheet {
   sku_prefix: string;
 }
 
-interface TabDef {
-  id: string;
-  label: string;
-  icon: React.ReactNode;
-  dept: Department;
-  lockedCategory?: string;
-}
-
-const EQ_TAB_PREFIX = "eq:";
-
 const DEPT_ICONS: Record<Department, React.ReactNode> = {
-  art:       <Clapperboard className="w-3.5 h-3.5 shrink-0" />,
-  wd:        <Shirt        className="w-3.5 h-3.5 shrink-0" />,
-  equipment: <Camera       className="w-3.5 h-3.5 shrink-0" />,
+  art:       <Clapperboard className="w-4 h-4 shrink-0" />,
+  wd:        <Shirt        className="w-4 h-4 shrink-0" />,
+  equipment: <Camera       className="w-4 h-4 shrink-0" />,
 };
 
 const Index = () => {
@@ -43,15 +33,19 @@ const Index = () => {
   const { lang, setLang, t } = useLang();
   const nav = useNavigate();
   const isAdmin = roles.includes("admin");
-  const tabStripRef = useRef<HTMLDivElement>(null);
+  const subTabStripRef = useRef<HTMLDivElement>(null);
 
-  const [txHistoryOpen, setTxHistoryOpen]   = useState(false);
-  const [linkSheetOpen, setLinkSheetOpen]   = useState(false);
-  const [registeredSheets, setRegisteredSheets] = useState<RegisteredSheet[]>([]);
-  const [equipCategories, setEquipCategories]   = useState<string[]>([]);
-  const [activeTabId, setActiveTabId]           = useState<string>("");
+  const [txHistoryOpen,    setTxHistoryOpen]    = useState(false);
+  const [linkSheetOpen,    setLinkSheetOpen]     = useState(false);
+  const [registeredSheets, setRegisteredSheets]  = useState<RegisteredSheet[]>([]);
+  const [equipCategories,  setEquipCategories]   = useState<string[]>([]);
 
-  // ── Data loaders ─────────────────────────────────────────────────────────
+  // Primary department tab
+  const [activeDept, setActiveDept] = useState<Department | "">("");
+  // Equipment sub-tab ("all" or a category name)
+  const [activeSubTab, setActiveSubTab] = useState<string>("all");
+
+  // ── Data loaders ──────────────────────────────────────────────────────────
 
   const loadRegisteredSheets = async () => {
     const { data } = await supabase
@@ -85,10 +79,42 @@ const Index = () => {
     }
     loadRegisteredSheets();
     if (canView("equipment")) loadEquipCategories();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // ── Tab list ─────────────────────────────────────────────────────────────
+  // ── Primary-tab initialisation ────────────────────────────────────────────
+
+  const visibleDepts = (["art", "wd", "equipment"] as Department[]).filter(canView);
+
+  // Set the default active dept once roles resolve; never override a user pick.
+  useEffect(() => {
+    if (visibleDepts.length > 0 && !visibleDepts.includes(activeDept as Department)) {
+      setActiveDept(visibleDepts[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleDepts.join(",")]);
+
+  // Reset sub-tab to "all" whenever a stale category is no longer in the list.
+  useEffect(() => {
+    if (activeSubTab !== "all" && equipCategories.length > 0 && !equipCategories.includes(activeSubTab)) {
+      setActiveSubTab("all");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [equipCategories.join("|")]);
+
+  // Scroll the active sub-tab pill into view.
+  useEffect(() => {
+    if (!subTabStripRef.current) return;
+    const buttons = subTabStripRef.current.querySelectorAll<HTMLElement>("[data-subtab]");
+    for (const btn of Array.from(buttons)) {
+      if (btn.dataset.subtab === activeSubTab) {
+        btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+        break;
+      }
+    }
+  }, [activeSubTab]);
+
+  // ── Derived values ────────────────────────────────────────────────────────
 
   const deptLabel: Record<Department, string> = {
     art: t.tabArt,
@@ -96,56 +122,68 @@ const Index = () => {
     equipment: t.tabEquipment,
   };
 
-  const allTabs = useMemo<TabDef[]>(() => {
-    const tabs: TabDef[] = [];
-
-    // Non-equipment departments first
-    for (const d of ["art", "wd"] as Department[]) {
-      if (canView(d)) {
-        tabs.push({ id: d, label: deptLabel[d], icon: DEPT_ICONS[d], dept: d });
-      }
-    }
-
-    // One tab per equipment category — mirrors Google Sheet bottom tabs
-    if (canView("equipment")) {
-      for (const cat of equipCategories) {
-        tabs.push({
-          id: `${EQ_TAB_PREFIX}${cat}`,
-          label: cat,
-          icon: DEPT_ICONS.equipment,
-          dept: "equipment",
-          lockedCategory: cat,
-        });
-      }
-    }
-
-    return tabs;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [equipCategories.join("|"), canView("art"), canView("wd"), canView("equipment")]);
-
-  // Set the default active tab once tabs are available; never override a
-  // user-initiated selection.
-  const tabIdsKey = allTabs.map((tb) => tb.id).join("|");
-  useEffect(() => {
-    if (allTabs.length > 0 && !allTabs.find((tb) => tb.id === activeTabId)) {
-      setActiveTabId(allTabs[0].id);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabIdsKey]);
-
-  // Scroll the active tab into view when it changes
-  useEffect(() => {
-    if (!tabStripRef.current) return;
-    const el = tabStripRef.current.querySelector<HTMLElement>(`[data-tab="${activeTabId}"]`);
-    el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-  }, [activeTabId]);
-
-  // ── Derived state ─────────────────────────────────────────────────────────
-
-  const activeTab = allTabs.find((tb) => tb.id === activeTabId);
   const mainSheet = registeredSheets.find((s) => s.sku_prefix === "");
 
-  // ── Early returns ─────────────────────────────────────────────────────────
+  // Equipment sub-nav: pill strip passed as a slot into SkuTable.
+  // Rendered after stats cards, before the toolbar row.
+  const equipSubNav = canView("equipment") ? (
+    <div
+      ref={subTabStripRef}
+      className="flex items-center gap-1.5 overflow-x-auto py-2"
+      style={{ scrollbarWidth: "none" }}
+    >
+      {/* "Show all" pill */}
+      <button
+        data-subtab="all"
+        onClick={() => setActiveSubTab("all")}
+        className={cn(
+          "inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium",
+          "whitespace-nowrap shrink-0 border transition-colors font-th",
+          activeSubTab === "all"
+            ? "bg-primary text-primary-foreground border-primary"
+            : "border-border text-muted-foreground hover:text-foreground hover:bg-accent",
+        )}
+      >
+        แสดงทั้งหมด
+      </button>
+
+      {/* One pill per equipment category */}
+      {equipCategories.map((cat) => (
+        <button
+          key={cat}
+          data-subtab={cat}
+          onClick={() => setActiveSubTab(cat)}
+          className={cn(
+            "inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium",
+            "whitespace-nowrap shrink-0 border transition-colors font-th",
+            activeSubTab === cat
+              ? "bg-primary text-primary-foreground border-primary"
+              : "border-border text-muted-foreground hover:text-foreground hover:bg-accent",
+          )}
+        >
+          {cat}
+        </button>
+      ))}
+
+      {/* Admin: register a new sheet into the Equipment ecosystem */}
+      {isAdmin && (
+        <button
+          onClick={() => setLinkSheetOpen(true)}
+          title="เพิ่ม Google Sheet ใหม่เป็นแท็บ"
+          className={cn(
+            "inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium",
+            "whitespace-nowrap shrink-0 border border-dashed transition-colors",
+            "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 hover:bg-accent",
+          )}
+        >
+          <Plus className="w-3 h-3" />
+          เพิ่มแท็บ
+        </button>
+      )}
+    </div>
+  ) : null;
+
+  // ── Early return: loading ─────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -160,8 +198,10 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
 
-      {/* ── Top header bar ─────────────────────────────────────────────── */}
+      {/* ── Sticky header ─────────────────────────────────────────────────── */}
       <header className="border-b bg-card/50 backdrop-blur sticky top-0 z-10">
+
+        {/* App bar: logo + user controls */}
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 shrink-0">
             <div
@@ -228,53 +268,33 @@ const Index = () => {
           </div>
         </div>
 
-        {/* ── Flat tab strip — mirrors Google Sheet bottom tabs ─────────── */}
-        {user && allTabs.length > 0 && (
-          <div
-            ref={tabStripRef}
-            className="flex overflow-x-auto border-t scrollbar-none"
-            style={{ scrollbarWidth: "none" }}
-          >
-            {allTabs.map((tab) => (
+        {/* Primary department tab strip */}
+        {user && visibleDepts.length > 0 && (
+          <div className="flex border-t overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+            {visibleDepts.map((dept) => (
               <button
-                key={tab.id}
-                data-tab={tab.id}
-                onClick={() => setActiveTabId(tab.id)}
+                key={dept}
+                onClick={() => setActiveDept(dept)}
                 className={cn(
-                  "flex items-center gap-1.5 px-4 py-2.5 text-sm whitespace-nowrap",
-                  "border-b-2 -mb-px font-medium transition-colors shrink-0 font-th",
-                  activeTabId === tab.id
+                  "flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium",
+                  "whitespace-nowrap shrink-0 border-b-2 -mb-px transition-colors",
+                  activeDept === dept
                     ? "border-primary text-primary bg-primary/5"
                     : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50",
                 )}
               >
-                {tab.icon}
-                {tab.label}
+                {DEPT_ICONS[dept]}
+                {deptLabel[dept]}
               </button>
             ))}
-
-            {/* Admin-only: register a new Google Sheet as additional tabs */}
-            {isAdmin && canView("equipment") && (
-              <button
-                onClick={() => setLinkSheetOpen(true)}
-                title="เพิ่ม Google Sheet ใหม่เป็นแท็บ"
-                className={cn(
-                  "flex items-center gap-1 px-3 py-2.5 text-sm shrink-0",
-                  "border-b-2 border-transparent border-dashed",
-                  "text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors",
-                )}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">เพิ่มแท็บ</span>
-              </button>
-            )}
           </div>
         )}
       </header>
 
-      {/* ── Main content ───────────────────────────────────────────────── */}
+      {/* ── Main content ───────────────────────────────────────────────────── */}
       <main className="container mx-auto px-4 py-6">
 
+        {/* Not signed in */}
         {!user && (
           <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
             <Package className="w-12 h-12 text-muted-foreground opacity-30" />
@@ -285,7 +305,8 @@ const Index = () => {
           </div>
         )}
 
-        {user && allTabs.length === 0 && (
+        {/* Signed in but no accessible sections */}
+        {user && visibleDepts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
             <ShieldCheck className="w-12 h-12 text-muted-foreground opacity-30" />
             <p className="font-medium">{t.noSections}</p>
@@ -293,23 +314,25 @@ const Index = () => {
           </div>
         )}
 
-        {/* Art / WD: one stable SkuTable instance per department */}
-        {user && activeTab?.dept === "art" && (
+        {/* Art */}
+        {user && activeDept === "art" && (
           <SkuTable key="art" department="art" />
         )}
-        {user && activeTab?.dept === "wd" && (
+
+        {/* WD */}
+        {user && activeDept === "wd" && (
           <SkuTable key="wd" department="wd" />
         )}
 
-        {/* Equipment: one stable instance; lockedCategory changes on tab switch.
-            The data is loaded once and client-side filtered — no re-fetch when
-            the user switches between equipment category tabs. */}
-        {user && activeTab?.dept === "equipment" && (
+        {/* Equipment — single stable instance; lockedCategory changes on sub-tab
+            switch so items are loaded once and filtered client-side. */}
+        {user && activeDept === "equipment" && (
           <SkuTable
             key="equipment"
             department="equipment"
-            lockedCategory={activeTab.lockedCategory}
+            lockedCategory={activeSubTab === "all" ? undefined : activeSubTab}
             sheetId={mainSheet?.sheet_id}
+            subNav={equipSubNav}
           />
         )}
       </main>
