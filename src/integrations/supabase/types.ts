@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      google_sheets_registry: {
+        Row: {
+          created_at: string
+          department: Database["public"]["Enums"]["department"]
+          id: string
+          is_active: boolean
+          name: string
+          sheet_id: string
+          sku_prefix: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department: Database["public"]["Enums"]["department"]
+          id?: string
+          is_active?: boolean
+          name: string
+          sheet_id: string
+          sku_prefix?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department?: Database["public"]["Enums"]["department"]
+          id?: string
+          is_active?: boolean
+          name?: string
+          sheet_id?: string
+          sku_prefix?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string

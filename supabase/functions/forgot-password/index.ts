@@ -1,29 +1,53 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const ALLOWED_ORIGINS = new Set([
+  "https://wilan-stockcheck.pages.dev",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://localhost:4173",
+]);
 
 Deno.serve(async (req) => {
+  const origin = req.headers.get("origin") ?? "";
+  const allowOrigin = ALLOWED_ORIGINS.has(origin)
+    ? origin
+    : "https://wilan-stockcheck.pages.dev";
+
+  const cors: Record<string, string> = {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    Vary: "Origin",
+  };
+
+  const respond = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: cors });
   }
 
   if (req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
+    return respond({ error: "Method not allowed" }, 405);
   }
 
   let email: string;
   try {
-    ({ email } = await req.json());
+    const body = await req.json();
+    email = body?.email;
   } catch {
-    return json({ error: "Invalid request body" }, 400);
+    return respond({ error: "Invalid request body" }, 400);
   }
 
-  if (!email || typeof email !== "string") {
-    return json({ error: "email is required" }, 400);
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    return respond({ error: "A valid email address is required" }, 400);
   }
+
+  email = email.trim().toLowerCase();
 
   const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -41,12 +65,11 @@ Deno.serve(async (req) => {
       options: { redirectTo: "https://wilan-stockcheck.pages.dev/update-password" },
     });
     if (error || !data?.properties?.action_link) {
-      // User not found or error — return success silently
-      return json({ success: true, lineSent: false });
+      return respond({ success: true, lineSent: false });
     }
     recoveryLink = data.properties.action_link;
   } catch {
-    return json({ success: true, lineSent: false });
+    return respond({ success: true, lineSent: false });
   }
 
   // Look up LINE user ID
@@ -68,43 +91,54 @@ Deno.serve(async (req) => {
   // Send email via Resend
   const resendKey = Deno.env.get("RESEND_API_KEY");
   if (!resendKey) {
-    return json({ error: "RESEND_API_KEY not configured" }, 500);
+    return respond({ error: "RESEND_API_KEY not configured" }, 500);
   }
 
-  const emailRes = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "Wilan Studio <noreply@wilanstudioresend.xyz>",
-      to: [email],
-      subject: "รีเซ็ตรหัสผ่าน — Wilan Studio",
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;color:#1a1a1a;">
-          <div style="margin-bottom:24px;">
-            <span style="font-size:22px;font-weight:700;">SKU Stock</span>
-            <span style="font-size:14px;color:#888;margin-left:8px;">by Wilan Studio</span>
+  let emailRes: Response;
+  try {
+    emailRes = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Wilan Studio <noreply@wilanstudioresend.xyz>",
+        to: [email],
+        subject: "รีเซ็ตรหัสผ่าน — Wilan Studio",
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;color:#1a1a1a;">
+            <div style="margin-bottom:24px;">
+              <span style="font-size:22px;font-weight:700;">SKU Stock</span>
+              <span style="font-size:14px;color:#888;margin-left:8px;">by Wilan Studio</span>
+            </div>
+            <h2 style="margin:0 0 8px;font-size:20px;">รีเซ็ตรหัสผ่าน</h2>
+            <p style="color:#555;margin:0 0 24px;">คลิกปุ่มด้านล่างเพื่อตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ</p>
+            <a href="${recoveryLink}"
+              style="display:inline-block;background:#ff5a1f;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">
+              ตั้งรหัสผ่านใหม่
+            </a>
+            <p style="color:#999;font-size:12px;margin-top:24px;">
+              ลิงก์นี้ใช้ได้ครั้งเดียวและจะหมดอายุใน 1 ชั่วโมง<br>
+              หากคุณไม่ได้ขอรีเซ็ต กรุณาเพิกเฉยต่ออีเมลนี้
+            </p>
           </div>
-          <h2 style="margin:0 0 8px;font-size:20px;">รีเซ็ตรหัสผ่าน</h2>
-          <p style="color:#555;margin:0 0 24px;">คลิกปุ่มด้านล่างเพื่อตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ</p>
-          <a href="${recoveryLink}"
-            style="display:inline-block;background:#ff5a1f;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">
-            ตั้งรหัสผ่านใหม่
-          </a>
-          <p style="color:#999;font-size:12px;margin-top:24px;">
-            ลิงก์นี้ใช้ได้ครั้งเดียวและจะหมดอายุใน 1 ชั่วโมง<br>
-            หากคุณไม่ได้ขอรีเซ็ต กรุณาเพิกเฉยต่ออีเมลนี้
-          </p>
-        </div>
-      `,
-    }),
-  });
+        `,
+      }),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Network error";
+    return respond({ error: `Failed to reach Resend: ${message}` }, 502);
+  }
 
   if (!emailRes.ok) {
-    const body = await emailRes.text();
-    return json({ error: `Resend error: ${body}` }, 502);
+    let errBody = `HTTP ${emailRes.status}`;
+    try {
+      errBody = await emailRes.text();
+    } catch {
+      // use status fallback
+    }
+    return respond({ error: `Resend error: ${errBody}` }, 502);
   }
 
   // Send LINE push message (best-effort — failure does not block email)
@@ -136,15 +170,13 @@ Deno.serve(async (req) => {
     }
   }
 
-  return json({ success: true, lineSent });
+  return respond({ success: true, lineSent });
 });
 
 async function getLineAccessToken(): Promise<string | null> {
-  // Prefer a pre-issued long-lived token stored as a secret
   const stored = Deno.env.get("LINE_CHANNEL_ACCESS_TOKEN");
   if (stored) return stored;
 
-  // Fall back to issuing a short-lived token from Channel credentials
   const channelId = Deno.env.get("LINE_CHANNEL_ID");
   const channelSecret = Deno.env.get("LINE_CHANNEL_SECRET");
   if (!channelId || !channelSecret) return null;
@@ -165,11 +197,4 @@ async function getLineAccessToken(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
 }

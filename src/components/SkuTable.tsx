@@ -44,9 +44,15 @@ const galleryImages = (i: Sku & { image_urls?: string[] | null }): string[] => {
 
 interface Props {
   department: "art" | "wd" | "equipment";
+  /** When defined, restricts the item list to SKUs matching `${skuPrefix}EQ-*`.
+   *  Pass "" for the main warehouse (EQ-*), a non-empty string for secondary
+   *  sheets (e.g. "B-" → "B-EQ-*").  Omit entirely for Art / WD departments. */
+  skuPrefix?: string;
+  /** Sheet ID forwarded to the sync edge function so it targets the right sheet. */
+  sheetId?: string;
 }
 
-export const SkuTable = ({ department }: Props) => {
+export const SkuTable = ({ department, skuPrefix, sheetId }: Props) => {
   const { user, canEdit } = useAuth();
   const { t, lang } = useLang();
   const editable = canEdit(department);
@@ -80,7 +86,9 @@ export const SkuTable = ({ department }: Props) => {
       return null;
     }
     if (!fnName) return null;
-    const { data, error } = await supabase.functions.invoke(fnName, { body: { dryRun } });
+    const body: Record<string, unknown> = { dryRun };
+    if (department === "equipment" && sheetId) body.sheetId = sheetId;
+    const { data, error } = await supabase.functions.invoke(fnName, { body });
     if (error) throw error;
     if (data?.error) throw new Error(data.error);
     return data;
@@ -156,12 +164,18 @@ export const SkuTable = ({ department }: Props) => {
     setLoading(true);
     const all: Sku[] = [];
     for (let from = 0; ; from += 1000) {
-      const { data, error } = await supabase
+      let req = supabase
         .from("skus")
         .select("*")
         .eq("department", department)
         .order("sku_code")
         .range(from, from + 999);
+      // When skuPrefix is defined (including ""), scope to that prefix so each
+      // tab only shows its own sheet's items.  Art/WD pass nothing → no filter.
+      if (skuPrefix !== undefined) {
+        req = req.like("sku_code", `${skuPrefix}EQ-%`);
+      }
+      const { data, error } = await req;
       if (error) { toast.error(error.message); break; }
       all.push(...(data ?? []) as Sku[]);
       if (!data || data.length < 1000) break;
@@ -170,7 +184,7 @@ export const SkuTable = ({ department }: Props) => {
     setLoading(false);
   };
 
-  useEffect(() => { setCategoryFilter("all"); load(); }, [department]);
+  useEffect(() => { setCategoryFilter("all"); load(); }, [department, skuPrefix]);
 
   const categories = useMemo(
     () => Array.from(new Set(items.map((i) => i.category).filter(Boolean) as string[])).sort(),
@@ -568,6 +582,7 @@ export const SkuTable = ({ department }: Props) => {
         onOpenChange={setTxLogOpen}
         defaultDept={department}
       />
+
     </div>
   );
 };

@@ -1,11 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const ALLOWED_ORIGINS = new Set([
+  "https://wilan-stockcheck.pages.dev",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://localhost:4173",
+]);
 
-const SHEET_ID = "10JzJsTHJaahqsJ0xFtGxOQX_Q0pPuHxuRQiXN-_jr-w";
+// Fallback sheet used when no registry row exists (main warehouse, no prefix).
+const DEFAULT_SHEET_ID = "10JzJsTHJaahqsJ0xFtGxOQX_Q0pPuHxuRQiXN-_jr-w";
 
 // Meta/template tabs that never contain inventory rows — skip them.
 const SKIP_TABS = new Set([
@@ -13,7 +16,6 @@ const SKIP_TABS = new Set([
 ]);
 
 // Known tabs: preserve their prefix so existing SKU codes never change.
-// Any tab added to the spreadsheet later gets a derived prefix automatically.
 const PREFIX_MAP: Record<string, { prefix: string; schema: "standard" | "charging" }> = {
   "Camera & Battery":                         { prefix: "CAM", schema: "standard" },
   "Accessories & Support":                    { prefix: "ACC", schema: "standard" },
@@ -26,15 +28,11 @@ const PREFIX_MAP: Record<string, { prefix: string; schema: "standard" | "chargin
   "Charging Checklist 02":                    { prefix: "CH2", schema: "charging" },
 };
 
-// Derive a stable 3-4 char prefix for tabs not in PREFIX_MAP.
-// Uses first ASCII alpha characters; falls back to a GID-based suffix for Thai names.
 function deriveTabConfig(
   name: string,
   gid: string,
 ): { prefix: string; schema: "standard" | "charging" } {
-  const schema: "standard" | "charging" = /charging/i.test(name)
-    ? "charging"
-    : "standard";
+  const schema: "standard" | "charging" = /charging/i.test(name) ? "charging" : "standard";
   const ascii = name.replace(/[^A-Za-z]/g, "");
   const prefix = ascii.length >= 3
     ? ascii.substring(0, 4).toUpperCase()
@@ -43,10 +41,7 @@ function deriveTabConfig(
 }
 
 function normalizeTitle(raw: string): string {
-  return String(raw)
-    .replace(/[­​‌‍⁠﻿]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return String(raw).replace(/[­​‌‍⁠﻿]/g, "").replace(/\s+/g, " ").trim();
 }
 
 async function fetchAllTabs(
@@ -69,10 +64,7 @@ async function fetchAllTabs(
       return { name, gid, ...config };
     })
     .filter(
-      (t) =>
-        t.name !== "" &&
-        !SKIP_TABS.has(t.name) &&
-        !t.name.toLowerCase().startsWith("copy of"),
+      (t) => t.name !== "" && !SKIP_TABS.has(t.name) && !t.name.toLowerCase().startsWith("copy of"),
     );
 }
 
@@ -108,23 +100,71 @@ function parseQtyMultiplier(s: string): number {
   return isNaN(n) || n <= 0 ? 1 : n;
 }
 
+// Column index constants (positional, matching template blueprint).
+const STD = { no: 0, free: 1, busy: 2, type: 3, name: 4, serial: 5, locMin: 6, locNon: 7, remark: 8, weight: 9 };
+const CHG = { status: 1, qty: 2, name: 3, date: 4 };
+
+// Template keywords accepted for the Location column header.
+const LOC_KEYWORDS = ["location", "loc.", "ที่เก็บ", "มีนบุรี", "สาขา"];
+
+/**
+ * Validates the standard-schema header row against the template blueprint.
+ * Returns an error string on mismatch, null if the structure is correct.
+ * Aborts are atomic — the caller should reject the entire sync if non-null.
+ */
+function validateStandardHeader(rows: string[][], tabName: string): string | null {
+  const headerRow = rows.find((r) => /^no\.?$/i.test((r[STD.no] ?? "").trim()));
+  if (!headerRow) {
+    // Sheet might be empty or have no recognisable header — skip structural check.
+    return null;
+  }
+
+  const nameHeader = (headerRow[STD.name] ?? "").trim().toLowerCase();
+  if (!nameHeader.includes("ชื่อ") && !nameHeader.includes("name")) {
+    return `โครงสร้างคอลัมน์ไม่ตรงตาม Template มาตรฐาน กรุณาตรวจสอบตำแหน่งช่อง ชื่อ/Name (แท็บ: ${tabName})`;
+  }
+
+  const locHeader = (headerRow[STD.locMin] ?? "").trim().toLowerCase();
+  if (!LOC_KEYWORDS.some((k) => locHeader.includes(k))) {
+    return `โครงสร้างคอลัมน์ไม่ตรงตาม Template มาตรฐาน กรุณาตรวจสอบตำแหน่งช่อง Location (แท็บ: ${tabName})`;
+  }
+
+  return null;
+}
+
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const origin = req.headers.get("origin") ?? "";
+  const allowOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "https://wilan-stockcheck.pages.dev";
+  const cors: Record<string, string> = {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    Vary: "Origin",
+  };
+
+  const respond = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
+
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   try {
     let dryRun = false;
+    let bodySheetId: string | undefined;
+
     if (req.method === "POST") {
       try {
         const body = await req.json();
         dryRun = !!body?.dryRun;
+        bodySheetId = body?.sheetId ?? undefined;
       } catch { /* no body */ }
     }
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respond({ error: "Unauthorized" }, 401);
     }
 
     const supaUser = createClient(
@@ -135,9 +175,7 @@ Deno.serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     const { data: claims, error: claimsErr } = await supaUser.auth.getClaims(token);
     if (claimsErr || !claims?.claims) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respond({ error: "Unauthorized" }, 401);
     }
     const userId = claims.claims.sub;
 
@@ -145,32 +183,88 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const { data: roles } = await supaAdmin
+
+    const { data: userRoles } = await supaAdmin
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
-    const allowed = (roles ?? []).some(
+    const allowed = (userRoles ?? []).some(
       (r: any) => r.role === "admin" || r.role === "equipment",
     );
     if (!allowed) {
-      return new Response(
-        JSON.stringify({ error: "ต้องมีสิทธิ์ Equipment หรือ Admin" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return respond({ error: "ต้องมีสิทธิ์ Equipment หรือ Admin" }, 403);
     }
 
-    // Discover all data tabs dynamically from the spreadsheet.
+    // ── Resolve which sheet + prefix to use ─────────────────────────────────
+    let sheetToSync: string;
+    let skuPrefix: string;
+
+    if (bodySheetId) {
+      const { data: regRow, error: regErr } = await supaAdmin
+        .from("google_sheets_registry")
+        .select("sheet_id, sku_prefix")
+        .eq("sheet_id", bodySheetId)
+        .eq("department", "equipment")
+        .eq("is_active", true)
+        .single();
+
+      if (regErr || !regRow) {
+        return respond({ error: "ไม่พบ Sheet ในระบบ หรือถูกปิดใช้งานแล้ว" }, 400);
+      }
+      sheetToSync = regRow.sheet_id as string;
+      skuPrefix = (regRow.sku_prefix as string) ?? "";
+    } else {
+      // Default: main sheet (sku_prefix = '') or hardcoded fallback.
+      const { data: mainRow } = await supaAdmin
+        .from("google_sheets_registry")
+        .select("sheet_id, sku_prefix")
+        .eq("department", "equipment")
+        .eq("sku_prefix", "")
+        .eq("is_active", true)
+        .maybeSingle();
+
+      sheetToSync = (mainRow?.sheet_id as string) ?? DEFAULT_SHEET_ID;
+      skuPrefix = (mainRow?.sku_prefix as string) ?? "";
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     const apiKey = Deno.env.get("GOOGLE_SHEETS_API_KEY");
     if (!apiKey) throw new Error("GOOGLE_SHEETS_API_KEY secret is not set");
-    const TABS = await fetchAllTabs(SHEET_ID, apiKey);
+    const TABS = await fetchAllTabs(sheetToSync, apiKey);
 
-    // Paginate to bypass PostgREST's 1000-row default cap.
+    // Fetch and pre-validate ALL tabs before touching the database — atomic abort.
+    const tabData: { tab: typeof TABS[0]; rows: string[][] }[] = [];
+    for (const tab of TABS) {
+      const url = `https://docs.google.com/spreadsheets/d/${sheetToSync}/gviz/tq?tqx=out:csv&gid=${tab.gid}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        // Non-fatal per-tab fetch error; collect and continue validation.
+        tabData.push({ tab, rows: [] });
+        continue;
+      }
+      const csv = await res.text();
+      const rows = parseCSV(csv);
+
+      if (tab.schema === "standard" && rows.length >= 1) {
+        const headerErr = validateStandardHeader(rows, tab.name);
+        if (headerErr) {
+          // Abort the entire sync for this sheet — return 400 before any DB write.
+          return respond({ error: headerErr }, 400);
+        }
+      }
+
+      tabData.push({ tab, rows });
+    }
+
+    // Scope existingSet to this sheet's prefix — isolates each registered sheet.
+    const skuPattern = `${skuPrefix}EQ-%`;
     const existingSet = new Set<string>();
     for (let from = 0; ; from += 1000) {
       const { data: page } = await supaAdmin
         .from("skus")
         .select("sku_code")
         .eq("department", "equipment")
+        .like("sku_code", skuPattern)
         .range(from, from + 999);
       if (!page?.length) break;
       for (const r of page) existingSet.add(r.sku_code);
@@ -185,20 +279,7 @@ Deno.serve(async (req) => {
     const perTab: Record<string, { inserted: number; updated: number }> = {};
     const sheetSkus = new Set<string>();
 
-    // Standard schema columns: 0=No 1=ว่าง 2=ติดงาน 3=ประเภท(qty x3) 4=ชื่อ 5=Serial 6=Loc.มีนบุรี 7=Loc.นนทบุรี 8=Remark 9=น้ำหนัก
-    // Charging schema: 0=(empty) 1=Status 2=Quantity 3=ชื่อ 4=Charge Date
-    const STD = { no: 0, free: 1, busy: 2, type: 3, name: 4, serial: 5, locMin: 6, locNon: 7, remark: 8, weight: 9 };
-    const CHG = { status: 1, qty: 2, name: 3, date: 4 };
-
-    for (const tab of TABS) {
-      const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${tab.gid}`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        errors.push(`${tab.name}: HTTP ${res.status}`);
-        continue;
-      }
-      const csv = await res.text();
-      const rows = parseCSV(csv);
+    for (const { tab, rows } of tabData) {
       if (rows.length < 2) { perTab[tab.name] = { inserted: 0, updated: 0 }; continue; }
 
       let seq = 0;
@@ -241,7 +322,8 @@ Deno.serve(async (req) => {
             ? "on_event"
             : "available";
 
-          const sku = `EQ-${tab.prefix}-${String(seq).padStart(3, "0")}`;
+          // sku_prefix prepended here — empty string for main warehouse is a no-op.
+          const sku = `${skuPrefix}EQ-${tab.prefix}-${String(seq).padStart(3, "0")}`;
           sheetSkus.add(sku);
           const record: any = {
             department: "equipment",
@@ -255,8 +337,7 @@ Deno.serve(async (req) => {
             notes_th: notes,
             special_features: weight ? `น้ำหนัก: ${weight}` : null,
           };
-          const isUpdate = existingSet.has(sku);
-          if (isUpdate) {
+          if (existingSet.has(sku)) {
             updateRecords.push(record);
             updated++;
             perTab[tab.name].updated++;
@@ -266,19 +347,18 @@ Deno.serve(async (req) => {
             perTab[tab.name].inserted++;
           }
         } else {
-          // charging checklist schema
+          // Charging checklist schema
           const name = (row[CHG.name] ?? "").trim();
           const status = (row[CHG.status] ?? "").trim();
           if (!name) continue;
           if (name.toLowerCase() === "charge date" || status.toLowerCase() === "status") continue;
-          // skip pure section header rows (no qty + no status + no date)
           const qtyCell = (row[CHG.qty] ?? "").trim();
           const dateCell = (row[CHG.date] ?? "").trim();
           if (!qtyCell && !dateCell && !status) continue;
           seq++;
 
           const qty = parseQtyMultiplier(qtyCell);
-          const sku = `EQ-${tab.prefix}-${String(seq).padStart(3, "0")}`;
+          const sku = `${skuPrefix}EQ-${tab.prefix}-${String(seq).padStart(3, "0")}`;
           const noteParts: string[] = [];
           if (status) noteParts.push(`Status: ${status}`);
           if (dateCell) noteParts.push(`Charge Date: ${dateCell}`);
@@ -294,8 +374,8 @@ Deno.serve(async (req) => {
             notes_th: noteParts.join(" | ") || null,
             special_features: null,
           };
-          const isUpdate = existingSet.has(sku);
-          if (isUpdate) {
+          sheetSkus.add(sku);
+          if (existingSet.has(sku)) {
             updateRecords.push(record);
             updated++;
             perTab[tab.name].updated++;
@@ -322,9 +402,8 @@ Deno.serve(async (req) => {
       await runBatch(updateRecords);
     }
 
-    // ── Orphan cleanup ──────────────────────────────────────────────────────────
-    // Any SKU that was in the DB but is no longer anywhere in the sheet is orphaned.
-    // Deletion is SCOPED to department="equipment" to never touch Art or WD rows.
+    // Orphan cleanup — scoped to this sheet's prefix pattern so sheets never
+    // delete each other's rows. E.g. prefix "B-" only touches "B-EQ-*" codes.
     const orphanedSkus = Array.from(existingSet).filter((s) => !sheetSkus.has(s));
     let deleted = 0;
 
@@ -335,7 +414,7 @@ Deno.serve(async (req) => {
           const { error } = await supaAdmin
             .from("skus")
             .delete()
-            .eq("department", "equipment")   // CRITICAL: never delete other departments
+            .eq("department", "equipment")
             .in("sku_code", chunk);
           if (error) errors.push(`cleanup: ${error.message}`);
           else deleted += chunk.length;
@@ -344,7 +423,6 @@ Deno.serve(async (req) => {
         deleted = orphanedSkus.length;
       }
     }
-    // ───────────────────────────────────────────────────────────────────────────
 
     if (!dryRun) {
       await supaAdmin.from("sync_logs").insert({
@@ -358,14 +436,23 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(
-      JSON.stringify({ success: true, dryRun, inserted, updated, deleted, orphanedSkus: dryRun ? orphanedSkus : [], perTab, errors }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return respond({
+      success: true,
+      dryRun,
+      sheetId: sheetToSync,
+      skuPrefix,
+      inserted,
+      updated,
+      deleted,
+      orphanedSkus: dryRun ? orphanedSkus : [],
+      perTab,
+      errors,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return new Response(JSON.stringify({ error: msg }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
   }
 });
