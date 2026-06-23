@@ -30,6 +30,19 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+// Normalise a category string for fuzzy comparison: lowercase, collapse
+// whitespace around "&", collapse repeated spaces.  Mirrors normKey() in the
+// Edge Function so tab labels always round-trip correctly against DB values.
+function normCat(s: string): string {
+  return s.toLowerCase().replace(/\s*&\s*/g, " & ").replace(/\s+/g, " ").trim();
+}
+
+// Derive the 3-4 char SKU prefix hint embedded in sku_code (e.g. "LIGH", "LIT")
+// from a category label, for use as a sku_code fallback filter.
+function skuPfxHint(cat: string): string {
+  return cat.replace(/[^A-Za-z]/g, "").substring(0, 4).toUpperCase();
+}
+
 function formatDateTime(iso: string) {
   const d    = new Date(iso);
   const dd   = String(d.getDate()).padStart(2, "0");
@@ -247,7 +260,21 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
 
   const filtered = useMemo(() => {
     let r = items;
-    if (effectiveCategory !== "all") r = r.filter((i) => (i.category ?? "") === effectiveCategory);
+    if (effectiveCategory !== "all") {
+      const target = normCat(effectiveCategory);
+      const hint   = skuPfxHint(effectiveCategory);
+      r = r.filter((i) => {
+        // Primary: normalised category string match (handles casing / & spacing).
+        if (normCat(i.category ?? "") === target) return true;
+        // Fallback: sku_code embeds a prefix derived from the category label.
+        // Catches items whose category field differs slightly from the tab label.
+        if (hint.length >= 3) {
+          const code = i.sku_code.toUpperCase();
+          return code.includes(`-${hint}-`) || code.includes(`-${hint.substring(0, 3)}-`);
+        }
+        return false;
+      });
+    }
     if (q.trim()) {
       const s = q.toLowerCase();
       r = r.filter((i) =>
@@ -261,11 +288,20 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
     return r;
   }, [items, q, effectiveCategory]);
 
-  // Stats scope: when a category is locked, metrics reflect only that category.
-  const statsItems = useMemo(
-    () => lockedCategory ? items.filter((i) => (i.category ?? "") === lockedCategory) : items,
-    [items, lockedCategory],
-  );
+  // Stats scope: when a category is locked, apply the same normalised matching.
+  const statsItems = useMemo(() => {
+    if (!lockedCategory) return items;
+    const target = normCat(lockedCategory);
+    const hint   = skuPfxHint(lockedCategory);
+    return items.filter((i) => {
+      if (normCat(i.category ?? "") === target) return true;
+      if (hint.length >= 3) {
+        const code = i.sku_code.toUpperCase();
+        return code.includes(`-${hint}-`) || code.includes(`-${hint.substring(0, 3)}-`);
+      }
+      return false;
+    });
+  }, [items, lockedCategory]);
   const totalQty = statsItems.reduce((a, b) => a + b.quantity, 0);
 
   const handleDelete = async () => {

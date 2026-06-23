@@ -58,17 +58,23 @@ const Index = () => {
   };
 
   const loadEquipCategories = async () => {
-    const { data } = await supabase
-      .from("skus")
-      .select("category")
-      .eq("department", "equipment")
-      .not("category", "is", null);
-    if (data) {
-      const cats = Array.from(
-        new Set(data.map((r) => r.category).filter(Boolean) as string[]),
-      ).sort();
-      setEquipCategories(cats);
+    // Paginate so we collect ALL distinct category strings regardless of how
+    // many rows the equipment table contains (Supabase caps plain selects at 1000).
+    const cats = new Set<string>();
+    for (let from = 0; ; from += 1000) {
+      const { data } = await supabase
+        .from("skus")
+        .select("category")
+        .eq("department", "equipment")
+        .not("category", "is", null)
+        .range(from, from + 999);
+      if (!data || data.length === 0) break;
+      for (const r of data) {
+        if (r.category) cats.add(r.category as string);
+      }
+      if (data.length < 1000) break;
     }
+    setEquipCategories(Array.from(cats).sort());
   };
 
   useEffect(() => {
