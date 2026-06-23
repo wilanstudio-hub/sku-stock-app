@@ -107,25 +107,41 @@ const CHG = { status: 1, qty: 2, name: 3, date: 4 };
 // Template keywords accepted for the Location column header.
 const LOC_KEYWORDS = ["location", "loc.", "ที่เก็บ", "มีนบุรี", "สาขา"];
 
+function normalizeCell(raw: unknown): string {
+  return String(raw ?? "").replace(/[­​‌‍⁠﻿]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 /**
  * Validates the standard-schema header row against the template blueprint.
- * Returns an error string on mismatch, null if the structure is correct.
- * Aborts are atomic — the caller should reject the entire sync if non-null.
+ * Returns an error string on mismatch, null if the structure looks acceptable.
+ * Matching is case-insensitive and scans the full header row so minor column
+ * shifts (e.g. the Lighting tab) do not produce false negatives.
  */
 function validateStandardHeader(rows: string[][], tabName: string): string | null {
-  const headerRow = rows.find((r) => /^no\.?$/i.test((r[STD.no] ?? "").trim()));
+  // Accept "No." anywhere in the first three columns (handles merged-cell offsets).
+  const headerRow = rows.find((r) =>
+    [0, 1, 2].some((i) => /^no\.?$/i.test(normalizeCell(r[i])))
+  );
   if (!headerRow) {
-    // Sheet might be empty or have no recognisable header — skip structural check.
+    // No recognisable header — nothing to validate.
     return null;
   }
 
-  const nameHeader = (headerRow[STD.name] ?? "").trim().toLowerCase();
-  if (!nameHeader.includes("ชื่อ") && !nameHeader.includes("name")) {
+  // Name keyword: scan the entire header row, not just the fixed index.
+  const nameOk = headerRow.some((cell) => {
+    const c = normalizeCell(cell);
+    return c.includes("ชื่อ") || c.includes("name");
+  });
+  if (!nameOk) {
     return `โครงสร้างคอลัมน์ไม่ตรงตาม Template มาตรฐาน กรุณาตรวจสอบตำแหน่งช่อง ชื่อ/Name (แท็บ: ${tabName})`;
   }
 
-  const locHeader = (headerRow[STD.locMin] ?? "").trim().toLowerCase();
-  if (!LOC_KEYWORDS.some((k) => locHeader.includes(k))) {
+  // Location keyword: scan the entire header row for any recognised keyword.
+  const locOk = headerRow.some((cell) => {
+    const c = normalizeCell(cell);
+    return LOC_KEYWORDS.some((k) => c.includes(k));
+  });
+  if (!locOk) {
     return `โครงสร้างคอลัมน์ไม่ตรงตาม Template มาตรฐาน กรุณาตรวจสอบตำแหน่งช่อง Location (แท็บ: ${tabName})`;
   }
 
@@ -232,13 +248,15 @@ Deno.serve(async (req) => {
     if (!apiKey) throw new Error("GOOGLE_SHEETS_API_KEY secret is not set");
     const TABS = await fetchAllTabs(sheetToSync, apiKey);
 
-    // Fetch and pre-validate ALL tabs before touching the database — atomic abort.
+    // Fetch and validate all tabs. A single tab failing layout validation is
+    // logged and skipped; it does not abort the entire sync.
+    const errors: string[] = [];
     const tabData: { tab: typeof TABS[0]; rows: string[][] }[] = [];
     for (const tab of TABS) {
       const url = `https://docs.google.com/spreadsheets/d/${sheetToSync}/gviz/tq?tqx=out:csv&gid=${tab.gid}`;
       const res = await fetch(url);
       if (!res.ok) {
-        // Non-fatal per-tab fetch error; collect and continue validation.
+        // Non-fatal per-tab fetch error; mark empty and continue.
         tabData.push({ tab, rows: [] });
         continue;
       }
@@ -248,8 +266,9 @@ Deno.serve(async (req) => {
       if (tab.schema === "standard" && rows.length >= 1) {
         const headerErr = validateStandardHeader(rows, tab.name);
         if (headerErr) {
-          // Abort the entire sync for this sheet — return 400 before any DB write.
-          return respond({ error: headerErr }, 400);
+          // Skip this tab and log — do not abort the whole sync.
+          errors.push(`[SKIP] ${headerErr}`);
+          continue;
         }
       }
 
@@ -273,7 +292,6 @@ Deno.serve(async (req) => {
 
     const insertRecords: any[] = [];
     const updateRecords: any[] = [];
-    const errors: string[] = [];
     let inserted = 0;
     let updated = 0;
     const perTab: Record<string, { inserted: number; updated: number }> = {};

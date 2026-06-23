@@ -22,6 +22,10 @@ import { SyncHistoryDialog } from "./SyncHistoryDialog";
 import { TransactionHistoryDialog } from "./TransactionHistoryDialog";
 import { toast } from "sonner";
 import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
@@ -76,6 +80,10 @@ export const SkuTable = ({ department, skuPrefix, sheetId }: Props) => {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [txLogOpen, setTxLogOpen] = useState(false);
   const [imgErrors, setImgErrors] = useState<Set<string>>(new Set());
+  const [checkoutSku, setCheckoutSku] = useState<Sku | null>(null);
+  const [checkAction, setCheckAction] = useState<"check_out" | "check_in">("check_out");
+  const [personName, setPersonName] = useState("");
+  const [checkSubmitting, setCheckSubmitting] = useState(false);
   const qrSheetRef = useRef<QrSheetHandle>(null);
 
   const fnName = department === "art" ? "sync-art-sheets" : department === "equipment" ? "sync-equipment-sheet" : department === "wd" ? "sync-wd-sheets" : null;
@@ -158,6 +166,37 @@ export const SkuTable = ({ department, skuPrefix, sheetId }: Props) => {
     }
     setEditing(null);
     setOpen(true);
+  };
+
+  const handleNameSubmit = async () => {
+    if (!checkoutSku || !personName.trim()) return;
+    setCheckSubmitting(true);
+    const nextStatus = checkAction === "check_out" ? "check_out" : "available";
+    const [txRes, skuRes] = await Promise.all([
+      supabase.from("sku_transactions").insert({
+        sku_code:    checkoutSku.sku_code,
+        department:  checkoutSku.department,
+        action_type: checkAction,
+        person_name: personName.trim(),
+      }),
+      supabase
+        .from("skus")
+        .update({ current_status: nextStatus, last_handler: personName.trim() })
+        .eq("sku_code", checkoutSku.sku_code),
+    ]);
+    if (txRes.error || skuRes.error) {
+      toast.error((txRes.error ?? skuRes.error)!.message);
+    } else {
+      toast.success(
+        checkAction === "check_out"
+          ? `📤 เบิก "${checkoutSku.name_th}" ออกแล้ว`
+          : `📥 รับคืน "${checkoutSku.name_th}" แล้ว`,
+      );
+      setCheckoutSku(null);
+      setPersonName("");
+      load();
+    }
+    setCheckSubmitting(false);
   };
 
   const load = async () => {
@@ -503,7 +542,37 @@ export const SkuTable = ({ department, skuPrefix, sheetId }: Props) => {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-1 justify-end">
+                      <div className="flex gap-1 justify-end items-center flex-wrap">
+                        {/* Check-out / Check-in shortcut */}
+                        {i.current_status !== "check_out" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-[11px] font-th border-amber-300 text-amber-700 hover:bg-amber-50 shrink-0"
+                            onClick={() => {
+                              setCheckoutSku(i);
+                              setCheckAction("check_out");
+                              setPersonName("");
+                            }}
+                            title="เบิกออก"
+                          >
+                            📤 เบิกออก
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-[11px] font-th border-emerald-300 text-emerald-700 hover:bg-emerald-50 shrink-0"
+                            onClick={() => {
+                              setCheckoutSku(i);
+                              setCheckAction("check_in");
+                              setPersonName("");
+                            }}
+                            title="รับคืน"
+                          >
+                            📥 รับคืน
+                          </Button>
+                        )}
                         <Button size="icon" variant="ghost" onClick={() => setQrSku(i)} title="QR Code">
                           <QrCode className="w-4 h-4" />
                         </Button>
@@ -536,6 +605,65 @@ export const SkuTable = ({ department, skuPrefix, sheetId }: Props) => {
         images={gallery?.images ?? []}
         alt={gallery?.alt ?? "Image"}
       />
+
+      {/* Name-confirmation dialog for check-out / check-in */}
+      <Dialog
+        open={!!checkoutSku}
+        onOpenChange={(o) => { if (!o) { setCheckoutSku(null); setPersonName(""); } }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-th">
+              {checkAction === "check_out" ? "📤 เบิกออก" : "📥 รับคืน"}
+            </DialogTitle>
+          </DialogHeader>
+          {checkoutSku && (
+            <div className="space-y-4 pt-1">
+              <div className="rounded-md bg-muted px-3 py-2 text-sm">
+                <p className="font-medium font-th leading-snug">{checkoutSku.name_th}</p>
+                <p className="font-mono text-xs text-muted-foreground mt-0.5">{checkoutSku.sku_code}</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="font-th text-sm">
+                  ชื่อผู้{checkAction === "check_out" ? "เบิก" : "นำคืน"} *
+                </Label>
+                <Input
+                  placeholder="ระบุชื่อ…"
+                  value={personName}
+                  onChange={(e) => setPersonName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && personName.trim() && !checkSubmitting) {
+                      handleNameSubmit();
+                    }
+                  }}
+                  autoFocus
+                  className="font-th"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCheckoutSku(null); setPersonName(""); }}>
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={handleNameSubmit}
+              disabled={!personName.trim() || checkSubmitting}
+              className={
+                checkAction === "check_out"
+                  ? "bg-amber-500 hover:bg-amber-600 text-white border-0"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+              }
+            >
+              {checkSubmitting
+                ? "กำลังบันทึก…"
+                : checkAction === "check_out"
+                ? "ยืนยันเบิกออก"
+                : "ยืนยันรับคืน"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>
