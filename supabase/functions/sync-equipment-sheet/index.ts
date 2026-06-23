@@ -310,7 +310,20 @@ Deno.serve(async (req) => {
       let seq = 0;
       perTab[tab.name] = perTab[tab.name] ?? { inserted: 0, updated: 0 };
 
-      for (let r = 0; r < rows.length; r++) {
+      // Detect the actual header row so any metadata rows above it (double-
+      // header layout, e.g. a title/notes row before "No. / Name / Location")
+      // are skipped. Data parsing starts from the row immediately after the
+      // header. Falls back to row 1 if no "No." header is found.
+      const dataStartIdx = tab.schema === "standard"
+        ? (() => {
+            const hIdx = rows.findIndex((r) =>
+              [0, 1, 2].some((col) => /^no\.?$/i.test(normalizeCell(r[col])))
+            );
+            return hIdx >= 0 ? hIdx + 1 : 1;
+          })()
+        : 0;
+
+      for (let r = dataStartIdx; r < rows.length; r++) {
         const row = rows[r];
         if (!row || row.every((c) => !c?.trim())) continue;
 
