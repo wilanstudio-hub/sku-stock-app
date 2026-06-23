@@ -248,31 +248,37 @@ Deno.serve(async (req) => {
     if (!apiKey) throw new Error("GOOGLE_SHEETS_API_KEY secret is not set");
     const TABS = await fetchAllTabs(sheetToSync, apiKey);
 
-    // Fetch and validate all tabs. A single tab failing layout validation is
-    // logged and skipped; it does not abort the entire sync.
+    // Fetch all tabs. Validation warnings are logged but never skip a tab —
+    // data rows use fixed column positions that remain valid even when a header
+    // label is missing or differently worded. Each tab is wrapped in try/catch
+    // so a broken tab cannot prevent the rest from being processed.
     const errors: string[] = [];
     const tabData: { tab: typeof TABS[0]; rows: string[][] }[] = [];
     for (const tab of TABS) {
-      const url = `https://docs.google.com/spreadsheets/d/${sheetToSync}/gviz/tq?tqx=out:csv&gid=${tab.gid}`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        // Non-fatal per-tab fetch error; mark empty and continue.
-        tabData.push({ tab, rows: [] });
-        continue;
-      }
-      const csv = await res.text();
-      const rows = parseCSV(csv);
-
-      if (tab.schema === "standard" && rows.length >= 1) {
-        const headerErr = validateStandardHeader(rows, tab.name);
-        if (headerErr) {
-          // Skip this tab and log — do not abort the whole sync.
-          errors.push(`[SKIP] ${headerErr}`);
+      try {
+        const url = `https://docs.google.com/spreadsheets/d/${sheetToSync}/gviz/tq?tqx=out:csv&gid=${tab.gid}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          errors.push(`[WARN] ${tab.name}: fetch failed (${res.status})`);
+          tabData.push({ tab, rows: [] });
           continue;
         }
-      }
+        const csv = await res.text();
+        const rows = parseCSV(csv);
 
-      tabData.push({ tab, rows });
+        if (tab.schema === "standard" && rows.length >= 1) {
+          const headerErr = validateStandardHeader(rows, tab.name);
+          if (headerErr) {
+            // Log the layout mismatch as a warning but still process the tab —
+            // data rows are positional and will parse correctly regardless.
+            errors.push(`[WARN] ${headerErr}`);
+          }
+        }
+
+        tabData.push({ tab, rows });
+      } catch (tabErr) {
+        errors.push(`[ERROR] ${tab.name}: ${tabErr instanceof Error ? tabErr.message : String(tabErr)}`);
+      }
     }
 
     // Scope existingSet to this sheet's prefix — isolates each registered sheet.
@@ -298,6 +304,7 @@ Deno.serve(async (req) => {
     const sheetSkus = new Set<string>();
 
     for (const { tab, rows } of tabData) {
+      try {
       if (rows.length < 2) { perTab[tab.name] = { inserted: 0, updated: 0 }; continue; }
 
       let seq = 0;
@@ -403,6 +410,10 @@ Deno.serve(async (req) => {
             perTab[tab.name].inserted++;
           }
         }
+      }
+      } catch (tabErr) {
+        errors.push(`[ERROR] ${tab.name}: ${tabErr instanceof Error ? tabErr.message : String(tabErr)}`);
+        perTab[tab.name] = perTab[tab.name] ?? { inserted: 0, updated: 0 };
       }
     }
 
