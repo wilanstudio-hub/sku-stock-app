@@ -40,6 +40,24 @@ function deriveTabConfig(
   return { prefix, schema };
 }
 
+// Normalize a tab name for fuzzy PREFIX_MAP lookup: lowercase, collapse
+// whitespace around "&", collapse repeated spaces.
+function normKey(s: string): string {
+  return s.toLowerCase().replace(/\s*&\s*/g, " & ").replace(/\s+/g, " ").trim();
+}
+
+// Look up a tab config by exact name first, then by fuzzy normalized name.
+// This tolerates sheet tab names like "Lighting &Light control&light stand"
+// matching the canonical "Lighting & Light Control & Light Stand" key.
+function lookupTabConfig(name: string): { prefix: string; schema: "standard" | "charging" } | undefined {
+  if (PREFIX_MAP[name]) return PREFIX_MAP[name];
+  const n = normKey(name);
+  for (const [key, val] of Object.entries(PREFIX_MAP)) {
+    if (normKey(key) === n) return val;
+  }
+  return undefined;
+}
+
 function normalizeTitle(raw: string): string {
   return String(raw).replace(/[­​‌‍⁠﻿]/g, "").replace(/\s+/g, " ").trim();
 }
@@ -60,7 +78,7 @@ async function fetchAllTabs(
     .map((s: any) => {
       const name = normalizeTitle(s.properties.title);
       const gid = String(s.properties.sheetId);
-      const config = PREFIX_MAP[name] ?? deriveTabConfig(name, gid);
+      const config = lookupTabConfig(name) ?? deriveTabConfig(name, gid);
       return { name, gid, ...config };
     })
     .filter(
@@ -269,9 +287,11 @@ Deno.serve(async (req) => {
         if (tab.schema === "standard" && rows.length >= 1) {
           const headerErr = validateStandardHeader(rows, tab.name);
           if (headerErr) {
-            // Log the layout mismatch as a warning but still process the tab —
-            // data rows are positional and will parse correctly regardless.
-            errors.push(`[WARN] ${headerErr}`);
+            // Structural mismatch is informational only — data rows use fixed
+            // positional indices and parse correctly regardless of header labels.
+            // Log to console so it shows in Edge Function logs without polluting
+            // the errors[] array returned to the caller.
+            console.warn(`[COLUMN-WARN] ${headerErr}`);
           }
         }
 
