@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLang } from "@/hooks/useLang";
@@ -33,17 +33,13 @@ const Index = () => {
   const { lang, setLang, t } = useLang();
   const nav = useNavigate();
   const isAdmin = roles.includes("admin");
-  const subTabStripRef = useRef<HTMLDivElement>(null);
 
-  const [txHistoryOpen,    setTxHistoryOpen]    = useState(false);
-  const [linkSheetOpen,    setLinkSheetOpen]     = useState(false);
-  const [registeredSheets, setRegisteredSheets]  = useState<RegisteredSheet[]>([]);
-  const [equipCategories,  setEquipCategories]   = useState<string[]>([]);
+  const [txHistoryOpen,    setTxHistoryOpen]   = useState(false);
+  const [linkSheetOpen,    setLinkSheetOpen]    = useState(false);
+  const [registeredSheets, setRegisteredSheets] = useState<RegisteredSheet[]>([]);
 
   // Primary department tab
   const [activeDept, setActiveDept] = useState<Department | "">("");
-  // Equipment sub-tab ("all" or a category name)
-  const [activeSubTab, setActiveSubTab] = useState<string>("all");
 
   // ── Data loaders ──────────────────────────────────────────────────────────
 
@@ -58,11 +54,7 @@ const Index = () => {
   };
 
   useEffect(() => {
-    if (!user) {
-      setRegisteredSheets([]);
-      setEquipCategories([]);
-      return;
-    }
+    if (!user) { setRegisteredSheets([]); return; }
     loadRegisteredSheets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -71,32 +63,12 @@ const Index = () => {
 
   const visibleDepts = (["art", "wd", "equipment"] as Department[]).filter(canView);
 
-  // Set the default active dept once roles resolve; never override a user pick.
   useEffect(() => {
     if (visibleDepts.length > 0 && !visibleDepts.includes(activeDept as Department)) {
       setActiveDept(visibleDepts[0]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleDepts.join(",")]);
-
-  // Reset sub-tab to "all" when the active category disappears from the list.
-  useEffect(() => {
-    if (activeSubTab !== "all" && equipCategories.length > 0 && !equipCategories.includes(activeSubTab)) {
-      setActiveSubTab("all");
-    }
-  }, [activeSubTab, equipCategories]);
-
-  // Scroll the active sub-tab pill into view.
-  useEffect(() => {
-    if (!subTabStripRef.current) return;
-    const buttons = subTabStripRef.current.querySelectorAll<HTMLElement>("[data-subtab]");
-    for (const btn of Array.from(buttons)) {
-      if (btn.dataset.subtab === activeSubTab) {
-        btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-        break;
-      }
-    }
-  }, [activeSubTab]);
 
   // ── Derived values ────────────────────────────────────────────────────────
 
@@ -106,69 +78,29 @@ const Index = () => {
     equipment: t.tabEquipment,
   };
 
-  // Accept "" or legacy "B-" as the main warehouse sheet (shortest prefix wins).
+  // Main equipment sheet — accept "" or legacy "B-" as the warehouse prefix.
   const mainSheet = registeredSheets
     .filter((s) => s.sku_prefix === "" || s.sku_prefix === "B-")
     .sort((a, b) => a.sku_prefix.length - b.sku_prefix.length)[0];
 
-  // Equipment sub-nav: pill strip passed as a slot into SkuTable.
-  // Rendered after stats cards, before the toolbar row.
-  const equipSubNav = canView("equipment") ? (
-    <div
-      ref={subTabStripRef}
-      className="flex items-center gap-1.5 overflow-x-auto py-2"
-      style={{ scrollbarWidth: "none" }}
-    >
-      {/* "Show all" pill */}
+  // Admin-only button to register a new Google Sheet into the Equipment ecosystem.
+  // Rendered between the stats cards and the toolbar row via the subNav slot.
+  const equipAdminAction = isAdmin ? (
+    <div className="flex justify-end pb-1">
       <button
-        data-subtab="all"
-        onClick={() => setActiveSubTab("all")}
+        onClick={() => setLinkSheetOpen(true)}
+        title="เพิ่ม Google Sheet ใหม่เป็นแท็บ"
         className={cn(
           "inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium",
-          "whitespace-nowrap shrink-0 border transition-colors font-th",
-          activeSubTab === "all"
-            ? "bg-primary text-primary-foreground border-primary"
-            : "border-border text-muted-foreground hover:text-foreground hover:bg-accent",
+          "border border-dashed transition-colors",
+          "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 hover:bg-accent",
         )}
       >
-        แสดงทั้งหมด
+        <Plus className="w-3 h-3" />
+        เพิ่มคลัง
       </button>
-
-      {/* One pill per equipment category */}
-      {equipCategories.map((cat) => (
-        <button
-          key={cat}
-          data-subtab={cat}
-          onClick={() => setActiveSubTab(cat)}
-          className={cn(
-            "inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium",
-            "whitespace-nowrap shrink-0 border transition-colors font-th",
-            activeSubTab === cat
-              ? "bg-primary text-primary-foreground border-primary"
-              : "border-border text-muted-foreground hover:text-foreground hover:bg-accent",
-          )}
-        >
-          {cat}
-        </button>
-      ))}
-
-      {/* Admin: register a new sheet into the Equipment ecosystem */}
-      {isAdmin && (
-        <button
-          onClick={() => setLinkSheetOpen(true)}
-          title="เพิ่ม Google Sheet ใหม่เป็นแท็บ"
-          className={cn(
-            "inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium",
-            "whitespace-nowrap shrink-0 border border-dashed transition-colors",
-            "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 hover:bg-accent",
-          )}
-        >
-          <Plus className="w-3 h-3" />
-          เพิ่มแท็บ
-        </button>
-      )}
     </div>
-  ) : null;
+  ) : undefined;
 
   // ── Early return: loading ─────────────────────────────────────────────────
 
@@ -311,16 +243,15 @@ const Index = () => {
           <SkuTable key="wd" department="wd" />
         )}
 
-        {/* Equipment — single stable instance; lockedCategory changes on sub-tab
-            switch so items are loaded once and filtered client-side. */}
+        {/* Equipment — category filtering uses the built-in dropdown, same as WD.
+            Admin "เพิ่มคลัง" button is injected via subNav so it sits between
+            the stats cards and the toolbar without disrupting the layout. */}
         {user && activeDept === "equipment" && (
           <SkuTable
             key="equipment"
             department="equipment"
-            lockedCategory={activeSubTab === "all" ? undefined : activeSubTab}
             sheetId={mainSheet?.sheet_id}
-            subNav={equipSubNav}
-            onCategoriesChange={setEquipCategories}
+            subNav={equipAdminAction}
           />
         )}
       </main>

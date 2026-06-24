@@ -17,15 +17,15 @@ const SKIP_TABS = new Set([
 
 // Known tabs: preserve their prefix so existing SKU codes never change.
 const PREFIX_MAP: Record<string, { prefix: string; schema: "standard" | "charging" }> = {
-  "Camera & Battery":                         { prefix: "CAM", schema: "standard" },
-  "Accessories & Support":                    { prefix: "ACC", schema: "standard" },
-  "Lens & Filter & Stepdown Ring":            { prefix: "LEN", schema: "standard" },
-  "Lighting & Light Control & Light Stand":   { prefix: "LIT", schema: "standard" },
-  "Grip & Tripods":                           { prefix: "GRP", schema: "standard" },
-  "Sound":                                    { prefix: "SND", schema: "standard" },
-  "HDD & Memory Card":                        { prefix: "HDD", schema: "standard" },
-  "Charging Checklist":                       { prefix: "CHG", schema: "charging" },
-  "Charging Checklist 02":                    { prefix: "CH2", schema: "charging" },
+  "Camera & Battery":                         { prefix: "CAM",  schema: "standard" },
+  "Accessories & Support":                    { prefix: "ACCE", schema: "standard" },
+  "Lens & Filter & Stepdown Ring":            { prefix: "LENS", schema: "standard" },
+  "Lighting & Light Control & Light Stand":   { prefix: "LIGH", schema: "standard" },
+  "Grip & Tripods":                           { prefix: "GRIP", schema: "standard" },
+  "Sound":                                    { prefix: "SOUN", schema: "standard" },
+  "HDD & Memory Card":                        { prefix: "HDD",  schema: "standard" },
+  "Charging Checklist":                       { prefix: "CHG",  schema: "charging" },
+  "Charging Checklist 02":                    { prefix: "CH2",  schema: "charging" },
 };
 
 function deriveTabConfig(
@@ -479,13 +479,29 @@ Deno.serve(async (req) => {
     }
 
     if (!dryRun) {
+      // Deduplicate by sku_code — keep last occurrence so the most-recent sheet
+      // row wins if two rows share the same generated or explicit SKU string.
+      // This prevents the Postgres "ON CONFLICT DO UPDATE command cannot affect
+      // row a second time" error that fires when the same key appears twice in
+      // one batch payload.
+      const dedupBySkuCode = (records: any[]): any[] => {
+        const seen = new Map<string, any>();
+        for (const r of records) seen.set(r.sku_code, r);
+        return Array.from(seen.values());
+      };
+
       const runBatch = async (records: any[]) => {
-        for (let i = 0; i < records.length; i += 500) {
-          const chunk = records.slice(i, i + 500);
-          const { error } = await supaAdmin
-            .from("skus")
-            .upsert(chunk, { onConflict: "sku_code", ignoreDuplicates: false });
-          if (error) { errors.push(error.message); break; }
+        const deduped = dedupBySkuCode(records);
+        for (let i = 0; i < deduped.length; i += 500) {
+          const chunk = deduped.slice(i, i + 500);
+          try {
+            const { error } = await supaAdmin
+              .from("skus")
+              .upsert(chunk, { onConflict: "sku_code", ignoreDuplicates: false });
+            if (error) errors.push(`upsert: ${error.message}`);
+          } catch (upsertErr) {
+            errors.push(`upsert exception: ${upsertErr instanceof Error ? upsertErr.message : String(upsertErr)}`);
+          }
         }
       };
       await runBatch(insertRecords);
