@@ -73,9 +73,13 @@ interface Props {
   /** Optional slot rendered between the stats cards and the toolbar row.
    *  Used by Index.tsx to inject the equipment sub-tab navigation bar. */
   subNav?: React.ReactNode;
+  /** Fires whenever the loaded item list changes, passing the sorted unique
+   *  category strings derived from actual DB rows.  Index.tsx uses this to
+   *  keep the sub-tab pill strip in sync with whatever the table loaded. */
+  onCategoriesChange?: (categories: string[]) => void;
 }
 
-export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNav }: Props) => {
+export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNav, onCategoriesChange }: Props) => {
   const { user, canEdit } = useAuth();
   const { t, lang } = useLang();
   const editable = canEdit(department);
@@ -248,6 +252,10 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
     () => Array.from(new Set(items.map((i) => i.category).filter(Boolean) as string[])).sort(),
     [items]
   );
+
+  useEffect(() => {
+    onCategoriesChange?.(categories);
+  }, [categories]);
 
   useEffect(() => {
     if (!lockedCategory && categoryFilter !== "all" && !categories.includes(categoryFilter)) {

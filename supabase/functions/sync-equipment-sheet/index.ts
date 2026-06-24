@@ -116,8 +116,6 @@ function parseQtyMultiplier(s: string): number {
   return isNaN(n) || n <= 0 ? 1 : n;
 }
 
-// Column index constants (positional, matching template blueprint).
-const STD = { no: 0, free: 1, busy: 2, type: 3, name: 4, serial: 5, locMin: 6, locNon: 7, remark: 8, weight: 9 };
 const CHG = { status: 1, qty: 2, name: 3, date: 4 };
 
 // Template keywords accepted for the Location column header.
@@ -129,32 +127,80 @@ function normalizeCell(raw: unknown): string {
 
 const HEADER_IDENT_RE = /^(no\.?|sku|#)$/i;
 
-// Scans ALL rows (no row-count cap) for a header that looks like an inventory
-// table. Returns the index of the first data row (header row + 1). If no
-// recognisable header is found, falls back to the first row that contains an
-// "EQ-" coded cell, or row 1 as a last resort — never skips the tab.
-function findDataStart(rows: string[][]): number {
-  // Pass 1 — look for a row that reads like an inventory header.
+// Per-tab column map — detected from the actual header row so tabs with
+// non-standard layouts (e.g. extra image columns) are handled correctly.
+// locSingle >= 0 means a single combined Location column; locMin/locNon are used
+// when the tab splits location into มีนบุรี / นนทบุรี columns.
+// skuCol >= 0 means the sheet already has canonical SKU codes in that column —
+// the sync reads them directly instead of generating sequential codes.
+interface ColMap {
+  no: number; name: number; free: number; busy: number; type: number;
+  serial: number; locMin: number; locNon: number; locSingle: number; skuCol: number; remark: number; weight: number;
+}
+const DEFAULT_COL_MAP: ColMap = {
+  no: 0, free: 1, busy: 2, type: 3, name: 4, serial: 5,
+  locMin: 6, locNon: 7, locSingle: -1, skuCol: -1, remark: 8, weight: 9,
+};
+
+function detectColMap(headerRow: string[]): ColMap {
+  const find = (test: (c: string) => boolean): number =>
+    headerRow.findIndex((c) => test(normalizeCell(c)));
+
+  const name      = find((c) => c.includes("ชื่อ") || (c.includes("name") && !c.includes("file")));
+  const free      = find((c) => (c.includes("ว่าง") || c === "free") && !c.includes("ไม่"));
+  const busy      = find((c) => c.includes("ไม่ว่าง") || c.includes("busy") || c.includes("ติดงาน"));
+  const type      = find((c) => c === "type" || c === "qty" || c.includes("จำนวน") || c.includes("type/qty") || c.includes("ประเภท"));
+  const serial    = find((c) => c.includes("serial") || c.includes("ซีเรียล"));
+  const locMinRaw  = find((c) => c.includes("มีนบุรี"));
+  const locNon     = find((c) => c.includes("นนทบุรี") || c.includes("nonthaburi"));
+  const locGeneric = find((c) => c === "location" || c.includes("loc.") || c.includes("ที่เก็บ"));
+  const skuCol     = find((c) => c === "sku");
+  const remark     = find((c) => c.includes("remark") && !c.includes("ยืม"));
+  const weight     = find((c) => c.includes("น้ำหนัก") || c.includes("weight") || c.includes("kg."));
+
+  // Location strategy:
+  //  1. Both มีนบุรี + นนทบุรี found → split columns (most tabs)
+  //  2. Only นนทบุรี found → pair generic "Location" as the primary column
+  //  3. Neither found → use a single generic location column (Lighting style)
+  const locMin = locMinRaw >= 0 ? locMinRaw
+    : (locNon >= 0 && locGeneric >= 0 ? locGeneric : -1);
+  const locSingle = (locMin < 0 && locNon < 0) ? locGeneric : -1;
+
+  const D = DEFAULT_COL_MAP;
+  return {
+    no:        0,
+    name:      name      >= 0 ? name      : D.name,
+    free:      free      >= 0 ? free      : D.free,
+    busy:      busy      >= 0 ? busy      : D.busy,
+    type:      type      >= 0 ? type      : D.type,
+    serial:    serial    >= 0 ? serial    : D.serial,
+    locMin:    locMin    >= 0 ? locMin    : (locSingle >= 0 ? -1 : D.locMin),
+    locNon:    locNon    >= 0 ? locNon    : (locSingle >= 0 ? -1 : D.locNon),
+    locSingle: locSingle >= 0 ? locSingle : -1,
+    skuCol:    skuCol    >= 0 ? skuCol    : -1,
+    remark:    remark    >= 0 ? remark    : D.remark,
+    weight:    weight    >= 0 ? weight    : D.weight,
+  };
+}
+
+// Scans ALL rows for a header; returns dataStart + per-tab column map.
+// Never skips a tab — always falls back gracefully.
+function findDataStart(rows: string[][]): { dataStart: number; colMap: ColMap } {
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const isHeader = row.some((cell) => {
       const c = normalizeCell(cell);
-      return (
-        HEADER_IDENT_RE.test(c) ||
-        c === "sku" ||
-        LOC_KEYWORDS.some((k) => c.includes(k)) ||
-        c.includes("name") ||
-        c.includes("ชื่อ")
-      );
+      return HEADER_IDENT_RE.test(c) || c === "sku" ||
+        LOC_KEYWORDS.some((k) => c.includes(k)) || c.includes("name") || c.includes("ชื่อ");
     });
-    if (isHeader) return i + 1;
+    if (isHeader) return { dataStart: i + 1, colMap: detectColMap(row) };
   }
-  // Pass 2 — no header found; look for the first row containing an EQ- SKU.
   for (let i = 0; i < rows.length; i++) {
-    if (rows[i].some((cell) => /^EQ-/i.test((cell ?? "").trim()))) return i;
+    if (rows[i].some((cell) => /^EQ-/i.test((cell ?? "").trim()))) {
+      return { dataStart: i, colMap: DEFAULT_COL_MAP };
+    }
   }
-  // Fallback: assume row 0 is a title/junk row; start data at row 1.
-  return 1;
+  return { dataStart: 1, colMap: DEFAULT_COL_MAP };
 }
 
 Deno.serve(async (req) => {
@@ -239,18 +285,23 @@ Deno.serve(async (req) => {
       sheetToSync = regRow.sheet_id as string;
       skuPrefix = (regRow.sku_prefix as string) ?? "";
     } else {
-      // Default: main sheet (sku_prefix = '') or hardcoded fallback.
-      const { data: mainRow } = await supaAdmin
+      // Default: main sheet — accept sku_prefix = '' or the legacy 'B-' value.
+      const { data: mainRows } = await supaAdmin
         .from("google_sheets_registry")
         .select("sheet_id, sku_prefix")
         .eq("department", "equipment")
-        .eq("sku_prefix", "")
         .eq("is_active", true)
-        .maybeSingle();
+        .in("sku_prefix", ["", "B-"]);
+
+      const mainRow = (mainRows ?? []).sort((a, b) =>
+        (a.sku_prefix as string).length - (b.sku_prefix as string).length
+      )[0];
 
       sheetToSync = (mainRow?.sheet_id as string) ?? DEFAULT_SHEET_ID;
       skuPrefix = (mainRow?.sku_prefix as string) ?? "";
     }
+    // Strip any accidental "B-" prefix — all equipment SKUs must be "EQ-*" only.
+    skuPrefix = skuPrefix.replace(/^B-/i, "");
     // ────────────────────────────────────────────────────────────────────────
 
     const apiKey = Deno.env.get("GOOGLE_SHEETS_API_KEY");
@@ -258,7 +309,7 @@ Deno.serve(async (req) => {
     const TABS = await fetchAllTabs(sheetToSync, apiKey);
 
     const errors: string[] = [];
-    const tabData: { tab: typeof TABS[0]; rows: string[][]; dataStart: number }[] = [];
+    const tabData: { tab: typeof TABS[0]; rows: string[][]; dataStart: number; colMap: ColMap }[] = [];
     for (const tab of TABS) {
       try {
         const url = `https://docs.google.com/spreadsheets/d/${sheetToSync}/gviz/tq?tqx=out:csv&gid=${tab.gid}`;
@@ -270,26 +321,31 @@ Deno.serve(async (req) => {
         const csv = await res.text();
         const rows = parseCSV(csv);
 
-        const dataStart = tab.schema === "standard" ? findDataStart(rows) : 0;
-        tabData.push({ tab, rows, dataStart });
+        const { dataStart, colMap } = tab.schema === "standard"
+          ? findDataStart(rows)
+          : { dataStart: 0, colMap: DEFAULT_COL_MAP };
+        tabData.push({ tab, rows, dataStart, colMap });
       } catch (tabErr) {
         errors.push(`[ERROR] ${tab.name}: ${tabErr instanceof Error ? tabErr.message : String(tabErr)}`);
       }
     }
 
-    // Scope existingSet to this sheet's prefix — isolates each registered sheet.
-    const skuPattern = `${skuPrefix}EQ-%`;
+    // Collect existing SKUs under the current prefix AND the legacy "B-" prefix
+    // so any accidentally-prefixed records are treated as orphans and deleted.
     const existingSet = new Set<string>();
-    for (let from = 0; ; from += 1000) {
-      const { data: page } = await supaAdmin
-        .from("skus")
-        .select("sku_code")
-        .eq("department", "equipment")
-        .like("sku_code", skuPattern)
-        .range(from, from + 999);
-      if (!page?.length) break;
-      for (const r of page) existingSet.add(r.sku_code);
-      if (page.length < 1000) break;
+    const collectPatterns = new Set([`${skuPrefix}EQ-%`, "B-EQ-%"]);
+    for (const pattern of collectPatterns) {
+      for (let from = 0; ; from += 1000) {
+        const { data: page } = await supaAdmin
+          .from("skus")
+          .select("sku_code")
+          .eq("department", "equipment")
+          .like("sku_code", pattern)
+          .range(from, from + 999);
+        if (!page?.length) break;
+        for (const r of page) existingSet.add(r.sku_code);
+        if (page.length < 1000) break;
+      }
     }
 
     const insertRecords: any[] = [];
@@ -299,7 +355,7 @@ Deno.serve(async (req) => {
     const perTab: Record<string, { inserted: number; updated: number }> = {};
     const sheetSkus = new Set<string>();
 
-    for (const { tab, rows, dataStart } of tabData) {
+    for (const { tab, rows, dataStart, colMap } of tabData) {
       try {
       if (rows.length < 2) { perTab[tab.name] = { inserted: 0, updated: 0 }; continue; }
 
@@ -311,8 +367,8 @@ Deno.serve(async (req) => {
         if (!row || row.every((c) => !c?.trim())) continue;
 
         if (tab.schema === "standard") {
-          const noStr = (row[STD.no] ?? "").trim();
-          const name = (row[STD.name] ?? "").trim();
+          const noStr = (row[colMap.no] ?? "").trim();
+          const name = (row[colMap.name] ?? "").trim();
           if (noStr.toLowerCase() === "no." || (noStr === "" && !name)) continue;
           if (name.toLowerCase() === "ชื่อ") continue;
           if (!name) continue;
@@ -320,17 +376,22 @@ Deno.serve(async (req) => {
           if (isNaN(noNum) || noNum <= 0) continue;
           seq++;
 
-          const qty = parseQtyMultiplier(row[STD.type] ?? "");
-          const serial = (row[STD.serial] ?? "").trim();
-          const remark = (row[STD.remark] ?? "").trim();
-          const weight = (row[STD.weight] ?? "").trim();
-          const locMin = (row[STD.locMin] ?? "").trim();
-          const locNon = (row[STD.locNon] ?? "").trim();
+          const qty = parseQtyMultiplier(row[colMap.type] ?? "");
+          const serial = (row[colMap.serial] ?? "").trim();
+          const remark = (row[colMap.remark] ?? "").trim();
+          const weight = (row[colMap.weight] ?? "").trim();
 
-          const locParts: string[] = [];
-          if (locMin) locParts.push(`มีนบุรี: ${locMin}`);
-          if (locNon) locParts.push(`นนทบุรี: ${locNon}`);
-          const location = locParts.join(" | ") || null;
+          let location: string | null;
+          if (colMap.locSingle >= 0) {
+            location = (row[colMap.locSingle] ?? "").trim() || null;
+          } else {
+            const locMin = colMap.locMin >= 0 ? (row[colMap.locMin] ?? "").trim() : "";
+            const locNon = colMap.locNon >= 0 ? (row[colMap.locNon] ?? "").trim() : "";
+            const locParts: string[] = [];
+            if (locMin) locParts.push(`มีนบุรี: ${locMin}`);
+            if (locNon) locParts.push(`นนทบุรี: ${locNon}`);
+            location = locParts.join(" | ") || null;
+          }
 
           const noteParts: string[] = [];
           if (serial) noteParts.push(`Serial: ${serial}`);
@@ -338,13 +399,17 @@ Deno.serve(async (req) => {
           if (remark) noteParts.push(`Remark: ${remark}`);
           const notes = noteParts.join(" | ") || null;
 
-          const busy = (row[STD.busy] ?? "").trim();
+          const busy = (row[colMap.busy] ?? "").trim();
           const availability: "available" | "on_event" | "unavailable" = busy
             ? "on_event"
             : "available";
 
-          // sku_prefix prepended here — empty string for main warehouse is a no-op.
-          const sku = `${skuPrefix}EQ-${tab.prefix}-${String(seq).padStart(3, "0")}`;
+          // Use the sheet's own SKU code when column I (or equivalent) is present
+          // and contains a valid EQ-* code; otherwise generate sequentially.
+          const sheetSku = colMap.skuCol >= 0 ? (row[colMap.skuCol] ?? "").trim() : "";
+          const sku = /^EQ-/i.test(sheetSku)
+            ? sheetSku
+            : `${skuPrefix}EQ-${tab.prefix}-${String(seq).padStart(3, "0")}`;
           sheetSkus.add(sku);
           const record: any = {
             department: "equipment",

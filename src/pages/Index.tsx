@@ -57,26 +57,6 @@ const Index = () => {
     setRegisteredSheets((data ?? []) as RegisteredSheet[]);
   };
 
-  const loadEquipCategories = async () => {
-    // Paginate so we collect ALL distinct category strings regardless of how
-    // many rows the equipment table contains (Supabase caps plain selects at 1000).
-    const cats = new Set<string>();
-    for (let from = 0; ; from += 1000) {
-      const { data } = await supabase
-        .from("skus")
-        .select("category")
-        .eq("department", "equipment")
-        .not("category", "is", null)
-        .range(from, from + 999);
-      if (!data || data.length === 0) break;
-      for (const r of data) {
-        if (r.category) cats.add(r.category as string);
-      }
-      if (data.length < 1000) break;
-    }
-    setEquipCategories(Array.from(cats).sort());
-  };
-
   useEffect(() => {
     if (!user) {
       setRegisteredSheets([]);
@@ -84,7 +64,6 @@ const Index = () => {
       return;
     }
     loadRegisteredSheets();
-    if (canView("equipment")) loadEquipCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -100,13 +79,12 @@ const Index = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleDepts.join(",")]);
 
-  // Reset sub-tab to "all" whenever a stale category is no longer in the list.
+  // Reset sub-tab to "all" when the active category disappears from the list.
   useEffect(() => {
     if (activeSubTab !== "all" && equipCategories.length > 0 && !equipCategories.includes(activeSubTab)) {
       setActiveSubTab("all");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [equipCategories.join("|")]);
+  }, [activeSubTab, equipCategories]);
 
   // Scroll the active sub-tab pill into view.
   useEffect(() => {
@@ -128,7 +106,10 @@ const Index = () => {
     equipment: t.tabEquipment,
   };
 
-  const mainSheet = registeredSheets.find((s) => s.sku_prefix === "");
+  // Accept "" or legacy "B-" as the main warehouse sheet (shortest prefix wins).
+  const mainSheet = registeredSheets
+    .filter((s) => s.sku_prefix === "" || s.sku_prefix === "B-")
+    .sort((a, b) => a.sku_prefix.length - b.sku_prefix.length)[0];
 
   // Equipment sub-nav: pill strip passed as a slot into SkuTable.
   // Rendered after stats cards, before the toolbar row.
@@ -339,6 +320,7 @@ const Index = () => {
             lockedCategory={activeSubTab === "all" ? undefined : activeSubTab}
             sheetId={mainSheet?.sheet_id}
             subNav={equipSubNav}
+            onCategoriesChange={setEquipCategories}
           />
         )}
       </main>
@@ -349,7 +331,7 @@ const Index = () => {
         <LinkSheetDialog
           open={linkSheetOpen}
           onOpenChange={setLinkSheetOpen}
-          onLinked={() => { loadRegisteredSheets(); loadEquipCategories(); }}
+          onLinked={() => { loadRegisteredSheets(); }}
         />
       )}
     </div>
