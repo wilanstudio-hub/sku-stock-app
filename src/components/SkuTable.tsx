@@ -107,6 +107,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
   const [checkAction, setCheckAction] = useState<"check_out" | "check_in">("check_out");
   const [personName, setPersonName] = useState("");
   const [checkSubmitting, setCheckSubmitting] = useState(false);
+  const [page, setPage] = useState(0);
   const qrSheetRef = useRef<QrSheetHandle>(null);
 
   const fnName = department === "art" ? "sync-art-sheets" : department === "equipment" ? "sync-equipment-sheet" : department === "wd" ? "sync-wd-sheets" : null;
@@ -266,16 +267,20 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
   // When a category is locked externally the prop wins; otherwise use the dropdown.
   const effectiveCategory = lockedCategory ?? categoryFilter;
 
+  // Reset page whenever the active category changes.
+  useEffect(() => { setPage(0); }, [effectiveCategory]);
+
+  const PAGE_SIZE = 100;
+
   const filtered = useMemo(() => {
     let r = items;
     if (effectiveCategory !== "all") {
       const target = normCat(effectiveCategory);
       const hint   = skuPfxHint(effectiveCategory);
       r = r.filter((i) => {
-        // Primary: normalised category string match (handles casing / & spacing).
         if (normCat(i.category ?? "") === target) return true;
-        // Fallback: sku_code embeds a prefix derived from the category label.
-        // Catches items whose category field differs slightly from the tab label.
+        const groupPrefix = target.split(" & ")[0];
+        if (groupPrefix.length >= 4 && normCat(i.category ?? "").startsWith(groupPrefix)) return true;
         if (hint.length >= 3) {
           const code = i.sku_code.toUpperCase();
           return code.includes(`-${hint}-`) || code.includes(`-${hint.substring(0, 3)}-`);
@@ -296,6 +301,9 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
     return r;
   }, [items, q, effectiveCategory]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageItems  = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
   // Stats scope: when a category is locked, apply the same normalised matching.
   const statsItems = useMemo(() => {
     if (!lockedCategory) return items;
@@ -303,6 +311,8 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
     const hint   = skuPfxHint(lockedCategory);
     return items.filter((i) => {
       if (normCat(i.category ?? "") === target) return true;
+      const groupPrefix = target.split(" & ")[0];
+      if (groupPrefix.length >= 4 && normCat(i.category ?? "").startsWith(groupPrefix)) return true;
       if (hint.length >= 3) {
         const code = i.sku_code.toUpperCase();
         return code.includes(`-${hint}-`) || code.includes(`-${hint.substring(0, 3)}-`);
@@ -522,7 +532,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
                   <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
                   {t.noItems}
                 </TableCell></TableRow>
-              ) : filtered.map((i) => {
+              ) : pageItems.map((i) => {
                 return (
                   <TableRow key={i.id} data-state={selected.has(i.id!) ? "selected" : undefined}>
                     <TableCell>
@@ -658,6 +668,36 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
           </Table>
         </div>
       </Card>
+
+      {/* Pagination footer — only shown when results exceed one page */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+          <span>
+            แสดง {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} จาก {filtered.length} รายการ
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page === 0}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              ← ก่อนหน้า
+            </Button>
+            <span className="px-2 tabular-nums">
+              {page + 1} / {totalPages}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page >= totalPages - 1}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              ถัดไป →
+            </Button>
+          </div>
+        </div>
+      )}
 
       <SkuDialog open={open} onOpenChange={setOpen} department={department} initial={editing} onSaved={load} />
       <QrDialog open={!!qrSku} onOpenChange={(o) => !o && setQrSku(null)} sku={qrSku} />
