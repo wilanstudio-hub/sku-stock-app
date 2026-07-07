@@ -550,7 +550,6 @@ Deno.serve(async (req) => {
       inserted,
       updated,
       deleted,
-      orphanedSkus: dryRun ? orphanedSkus : [],
       perTab,
       errors,
     });

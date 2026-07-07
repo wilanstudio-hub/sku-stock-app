@@ -315,7 +315,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, dryRun, inserted, updated, deleted, orphanedSkus: dryRun ? orphanedSkus : [], perTab, errors }),
+      JSON.stringify({ success: true, dryRun, inserted, updated, deleted, perTab, errors }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {

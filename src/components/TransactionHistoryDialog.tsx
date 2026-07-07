@@ -18,6 +18,10 @@ import {
 } from "@/components/ui/select";
 import { ClipboardList } from "lucide-react";
 
+// ── Module-level cache (5-minute TTL) ─────────────────────────────────────────
+const TX_CACHE_TTL = 5 * 60 * 1000;
+let txCache: { rows: SkuTransaction[]; ts: number } | null = null;
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ACTION_BADGE = {
@@ -68,6 +72,11 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
 
   useEffect(() => {
     if (!open) return;
+    const now = Date.now();
+    if (txCache && now - txCache.ts < TX_CACHE_TTL) {
+      setRows(txCache.rows);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     supabase
@@ -76,7 +85,9 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
       .order("created_at", { ascending: false })
       .limit(200)
       .then(({ data }) => {
-        if (!cancelled) setRows((data ?? []) as SkuTransaction[]);
+        const fetched = (data ?? []) as SkuTransaction[];
+        txCache = { rows: fetched, ts: Date.now() };
+        if (!cancelled) setRows(fetched);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };

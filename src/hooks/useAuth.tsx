@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -24,14 +24,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [roles, setRoles] = useState<Role[]>([]);
   const [viewerAccess, setViewerAccess] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadedForUid = useRef<string | null>(null);
 
   const loadRoles = async (uid: string) => {
+    if (loadedForUid.current === uid) return;
+    loadedForUid.current = uid;
     const [{ data: roleData }, { data: accessData }] = await Promise.all([
       supabase.from("user_roles").select("role").eq("user_id", uid),
       supabase.from("viewer_section_access").select("department").eq("user_id", uid),
     ]);
     setRoles((roleData?.map((r) => r.role as Role)) ?? []);
     setViewerAccess((accessData?.map((a) => a.department as Department)) ?? []);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -46,7 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) loadRoles(s.user.id);
-      setLoading(false);
+      else setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -58,7 +62,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const canEdit = (dept: Department): boolean =>
     roles.includes("admin") || roles.includes(dept);
 
-  const signOut = async () => { await supabase.auth.signOut(); };
+  const signOut = async () => {
+    loadedForUid.current = null;
+    await supabase.auth.signOut();
+  };
 
   return (
     <Ctx.Provider value={{ user, session, roles, viewerAccess, loading, canView, canEdit, signOut }}>

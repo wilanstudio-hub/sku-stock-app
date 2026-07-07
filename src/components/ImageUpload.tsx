@@ -34,7 +34,7 @@ export const ImageUpload = ({ value, onChange }: Props) => {
       const path = `${session.session.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
       const { error } = await supabase.storage
         .from("sku-images")
-        .upload(path, compressed, { contentType: "image/jpeg", upsert: false });
+        .upload(path, compressed, { contentType: "image/jpeg", upsert: false, cacheControl: "31536000" });
       if (error) throw error;
       const { data } = supabase.storage.from("sku-images").getPublicUrl(path);
       onChange(data.publicUrl);
