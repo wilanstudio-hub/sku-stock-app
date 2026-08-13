@@ -11,76 +11,111 @@ const TS = () => new Date().toISOString().slice(11, 23); // HH:MM:SS.mmm
 
 function dbgWrite(entry: string) {
   try {
-    const prev = localStorage.getItem("dbg_crash") ?? "";
-    localStorage.setItem("dbg_crash", `${prev}[${TS()}] ${entry}\n`);
-  } catch { /* storage full / private mode */ }
+    const key = "dbg_crash";
+    const prev = localStorage.getItem(key) ?? "";
+    localStorage.setItem(key, `${prev}[${TS()}] ${entry}\n`);
+  } catch { /* storage full / private mode — silently ignore */ }
 }
 
-// Intercept location navigation methods
+// Prove this code ran at all — written once at startup, separate from crash log
+try {
+  localStorage.setItem("dbg_started", `${new Date().toISOString()} | ${location.href}`);
+} catch { /* ignore */ }
+
+// ── Intercept location.href setter ───────────────────────────────────────────
+// Most navigations in web apps go through this setter, not assign/replace.
+try {
+  const locProto = Object.getPrototypeOf(location);
+  const hrefDesc = Object.getOwnPropertyDescriptor(locProto, "href");
+  if (hrefDesc?.set) {
+    const origSet = hrefDesc.set;
+    Object.defineProperty(location, "href", {
+      get: hrefDesc.get ? hrefDesc.get.bind(location) : () => location.toString(),
+      set(url: string) {
+        dbgWrite(`[DBG-href] location.href = "${url}"\n${new Error().stack ?? ""}`);
+        origSet.call(location, url);
+      },
+      configurable: true,
+    });
+  }
+} catch (e) {
+  dbgWrite(`[DBG-init] could not intercept href setter: ${e}`);
+}
+
+// ── Intercept location.assign / replace / reload ──────────────────────────────
 const _assign  = location.assign.bind(location);
 const _replace = location.replace.bind(location);
 const _reload  = location.reload.bind(location);
+try { (location as any).assign  = (url: string) => { dbgWrite(`[DBG-nav] assign(${url})\n${new Error().stack ?? ""}`);  _assign(url); }; } catch { /* read-only in some envs */ }
+try { (location as any).replace = (url: string) => { dbgWrite(`[DBG-nav] replace(${url})\n${new Error().stack ?? ""}`); _replace(url); }; } catch { /* read-only */ }
+try { (location as any).reload  = ()            => { dbgWrite(`[DBG-nav] reload()\n${new Error().stack ?? ""}`);         _reload(); };  } catch { /* read-only */ }
 
-(location as Location & { assign: typeof location.assign }).assign = (url: string | URL) => {
-  dbgWrite(`[DBG-nav] location.assign(${url})\n${new Error().stack ?? ""}`);
-  _assign(url);
-};
-(location as Location & { replace: typeof location.replace }).replace = (url: string | URL) => {
-  dbgWrite(`[DBG-nav] location.replace(${url})\n${new Error().stack ?? ""}`);
-  _replace(url);
-};
-(location as Location & { reload: typeof location.reload }).reload = () => {
-  dbgWrite(`[DBG-nav] location.reload()\n${new Error().stack ?? ""}`);
-  _reload();
-};
-
-// Intercept window.open
+// ── Intercept window.open ─────────────────────────────────────────────────────
 const _open = window.open.bind(window);
-window.open = (...args) => {
+window.open = (...args: Parameters<typeof window.open>) => {
   dbgWrite(`[DBG-nav] window.open(${args[0]})`);
   return _open(...args);
 };
 
-// Unhandled JS errors
+// ── Unhandled JS errors / rejections ─────────────────────────────────────────
 window.onerror = (msg, src, line, col, err) => {
   dbgWrite(`[DBG-err] ${msg} @ ${src}:${line}:${col}\n${err?.stack ?? ""}`);
-  return false; // don't suppress default handler
+  return false;
 };
 window.addEventListener("unhandledrejection", (e) => {
-  const reason = e.reason instanceof Error ? e.reason.stack ?? e.reason.message : String(e.reason);
-  dbgWrite(`[DBG-rej] ${reason}`);
+  const r = e.reason instanceof Error ? e.reason.stack ?? e.reason.message : String(e.reason);
+  dbgWrite(`[DBG-rej] ${r}`);
 });
 
-// Page-is-leaving signal (fires before unload/reload)
-window.addEventListener("beforeunload", () => {
-  dbgWrite("[DBG-bye] beforeunload fired — page is navigating away");
-});
+// ── Page lifecycle events ─────────────────────────────────────────────────────
+// beforeunload is unreliable on iOS WKWebView — pagehide is more reliable.
+window.addEventListener("beforeunload", () => dbgWrite("[DBG-bye] beforeunload"));
+window.addEventListener("pagehide",     (e) => dbgWrite(`[DBG-bye] pagehide persisted=${e.persisted}`));
+window.addEventListener("pageshow",     (e) => dbgWrite(`[DBG-show] pageshow persisted=${e.persisted}`));
 
-// Visibility tracking — captures tab hide/show cycles (Supabase trigger)
-document.addEventListener("visibilitychange", () => {
-  dbgWrite(`[DBG-vis] visibility → ${document.visibilityState}`);
-});
+// ── Visibility / focus tracking ───────────────────────────────────────────────
+document.addEventListener("visibilitychange", () =>
+  dbgWrite(`[DBG-vis] visibility → ${document.visibilityState}`)
+);
+window.addEventListener("blur",  () => dbgWrite("[DBG-focus] window blur"));
+window.addEventListener("focus", () => dbgWrite("[DBG-focus] window focus"));
+
+// ── Heartbeat — write every 5 s so we can see how far execution got ───────────
+let _hbCount = 0;
+const _hbTimer = setInterval(() => {
+  dbgWrite(`[DBG-hb] heartbeat #${++_hbCount}`);
+  if (_hbCount >= 60) clearInterval(_hbTimer); // auto-stop after 5 min
+}, 5000);
 
 // ── Startup: surface any previous crash data ──────────────────────────────────
-// Show the log in a red overlay so a tester can screenshot it on the next load.
 (function showPreviousCrashLog() {
-  const log = localStorage.getItem("dbg_crash");
-  if (!log) return;
+  const log     = localStorage.getItem("dbg_crash");
+  const started = localStorage.getItem("dbg_started");
+  if (!log && !started) return;
 
-  // Keep at most the last 3000 chars so the overlay stays readable.
-  const trimmed = log.length > 3000 ? "…" + log.slice(-3000) : log;
-  localStorage.removeItem("dbg_crash"); // clear so next load starts fresh
+  localStorage.removeItem("dbg_crash");
+  localStorage.removeItem("dbg_started");
+
+  const startLine = started ? `dbg_started: ${started}\n\n` : "";
+  const body      = log ?? "(no crash log written)";
+  const trimmed   = body.length > 4000 ? "…" + body.slice(-4000) : body;
 
   const overlay = document.createElement("div");
   overlay.style.cssText = [
     "position:fixed;inset:0;z-index:99999",
-    "background:#1a0000cc;backdrop-filter:blur(4px)",
-    "padding:16px;overflow:auto;font:12px/1.5 monospace",
+    "background:#0a000acc;backdrop-filter:blur(6px)",
+    "padding:16px;overflow:auto;font:11px/1.6 monospace",
     "color:#ff9090;white-space:pre-wrap;word-break:break-all",
   ].join(";");
-  overlay.textContent = "=== CRASH LOG (tap to dismiss) ===\n\n" + trimmed;
+  overlay.textContent = "=== CRASH LOG — tap to dismiss ===\n\n" + startLine + trimmed;
   overlay.onclick = () => overlay.remove();
-  document.body.appendChild(overlay);
+
+  // Wait for body to exist before appending
+  if (document.body) {
+    document.body.appendChild(overlay);
+  } else {
+    document.addEventListener("DOMContentLoaded", () => document.body.appendChild(overlay));
+  }
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
