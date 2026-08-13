@@ -52,7 +52,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Cancel any pending sign-out debounce — session is alive again.
         if (signOutTimer.current) { clearTimeout(signOutTimer.current); signOutTimer.current = null; }
         setSession(s);
-        setUser(s.user);
+        // Only update user when the identity actually changes. Firefox iOS fires
+        // onAuthStateChange on every visibilitychange/focus event, producing a new
+        // user object with the same id each time. Without this guard every event
+        // triggers a full React tree re-render and re-runs effects that depend on
+        // `user`, causing the 3-second "refresh" loop users reported.
+        setUser((prev) => (prev?.id === s.user!.id ? prev : s.user!));
         setTimeout(() => loadRoles(s.user!.id), 0);
       } else {
         // Debounce the signed-out state: token refresh briefly fires SIGNED_OUT
@@ -72,7 +77,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       clearTimeout(safetyTimer);
       setSession(s);
-      setUser(s?.user ?? null);
+      setUser((prev) => (s?.user ? (prev?.id === s.user.id ? prev : s.user) : null));
       if (s?.user) loadRoles(s.user.id);
       else setLoading(false);
     });

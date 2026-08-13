@@ -57,7 +57,7 @@ const Index = () => {
     if (!user) { setRegisteredSheets([]); return; }
     loadRegisteredSheets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user?.id]);
 
   // ── Primary-tab initialisation ────────────────────────────────────────────
 
