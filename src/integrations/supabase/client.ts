@@ -10,8 +10,9 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 // Sequential in-memory lock: replaces the Web Locks API (which deadlocks on
 // Firefox iOS / some Android WebViews). A promise chain serialises all auth
-// operations so concurrent token-refresh calls can't revoke each other's tokens,
-// which was the root cause of the rapid SIGNED_OUT → TOKEN_REFRESHED loop.
+// operations so concurrent token-refresh calls can't revoke each other's tokens.
+// The catch resets the chain on failure so a single network error doesn't
+// silently block all subsequent auth operations forever.
 let _authLock: Promise<unknown> = Promise.resolve();
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -19,6 +20,11 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-    lock: (_name, _acquireTimeout, fn) => (_authLock = _authLock.then(() => fn())),
+    detectSessionInUrl: false,
+    lock: (_name, _acquireTimeout, fn) => {
+      const result = _authLock.then(() => fn());
+      _authLock = result.catch(() => undefined);
+      return result;
+    },
   }
 });
