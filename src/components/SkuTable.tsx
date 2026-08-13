@@ -8,7 +8,6 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Pencil, Plus, Search, Trash2, Package, QrCode, RefreshCw, FileDown, Printer, FlaskConical, History, ClipboardList } from "lucide-react";
-import { exportSkusToPdf } from "@/lib/pdfExport";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLang } from "@/hooks/useLang";
@@ -343,6 +342,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
     const rows = items.filter((i) => ids.has(i.id!));
     if (rows.length === 0) return;
     try {
+      const { exportSkusToPdf } = await import("@/lib/pdfExport");
       await exportSkusToPdf(
         rows.map((r) => ({
           sku_code: r.sku_code,
