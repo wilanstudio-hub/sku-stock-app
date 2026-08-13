@@ -12,7 +12,19 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [
+    react(),
+    mode === "development" && componentTagger(),
+    // Remove `crossorigin` attribute from all script/link tags in the built HTML.
+    // iOS 26 beta WebKit has a regression where crossorigin module loading
+    // crashes the renderer before any JavaScript executes.
+    {
+      name: "remove-crossorigin",
+      transformIndexHtml(html: string) {
+        return html.replace(/\scrossorigin(?:="[^"]*")?/g, "");
+      },
+    },
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -20,6 +32,9 @@ export default defineConfig(({ mode }) => ({
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],
   },
   build: {
+    // Disable modulepreload polyfill — avoids inline JS that runs before our
+    // code and may trigger iOS 26 beta WebKit crash during module bootstrapping.
+    modulePreload: { polyfill: false },
     rollupOptions: {
       output: {
         manualChunks(id) {
