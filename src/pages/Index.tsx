@@ -233,25 +233,27 @@ const Index = () => {
           </div>
         )}
 
-        {/* Art */}
-        {user && activeDept === "art" && (
-          <SkuTable key="art" department="art" />
+        {/* Art — keep mounted while tab is active; pause loading when user is
+            temporarily null so we avoid the unmount→remount flash that wipes
+            in-progress fetches and resets the loading spinner on every auth
+            state cycle (token refresh briefly fires SIGNED_OUT on mobile). */}
+        {activeDept === "art" && (
+          <SkuTable key="art" department="art" enabled={!!user} />
         )}
 
         {/* WD */}
-        {user && activeDept === "wd" && (
-          <SkuTable key="wd" department="wd" />
+        {activeDept === "wd" && (
+          <SkuTable key="wd" department="wd" enabled={!!user} />
         )}
 
-        {/* Equipment — category filtering uses the built-in dropdown, same as WD.
-            Admin "เพิ่มคลัง" button is injected via subNav so it sits between
-            the stats cards and the toolbar without disrupting the layout. */}
-        {user && activeDept === "equipment" && (
+        {/* Equipment */}
+        {activeDept === "equipment" && (
           <SkuTable
             key="equipment"
             department="equipment"
             sheetId={mainSheet?.sheet_id}
             subNav={equipAdminAction}
+            enabled={!!user}
           />
         )}
       </main>

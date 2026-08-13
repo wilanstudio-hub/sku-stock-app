@@ -77,9 +77,12 @@ interface Props {
    *  category strings derived from actual DB rows.  Index.tsx uses this to
    *  keep the sub-tab pill strip in sync with whatever the table loaded. */
   onCategoriesChange?: (categories: string[]) => void;
+  /** When false the table stays mounted but skips all data fetching. Prevents
+   *  unmount/remount flash when the parent briefly loses auth state. */
+  enabled?: boolean;
 }
 
-export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNav, onCategoriesChange }: Props) => {
+export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNav, onCategoriesChange, enabled = true }: Props) => {
   const { user, canEdit } = useAuth();
   const { t, lang } = useLang();
   const editable = canEdit(department);
@@ -247,7 +250,12 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
     setLoading(false);
   };
 
-  useEffect(() => { setCategoryFilter("all"); load(); }, [department, skuPrefix]);
+  useEffect(() => {
+    if (!enabled) return;
+    setCategoryFilter("all");
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [department, skuPrefix, enabled]);
 
   const categories = useMemo(
     () => Array.from(new Set(items.map((i) => i.category).filter(Boolean) as string[])).sort(),

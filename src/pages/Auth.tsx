@@ -69,7 +69,15 @@ const Auth = () => {
       const { data, error } = await supabase.functions.invoke("forgot-password", {
         body: { email: fpEmail },
       });
-      if (error) throw error;
+      if (error) {
+        // Surface actual error body from non-2xx responses
+        let msg = error.message;
+        try {
+          const body = await (error as any).context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
       setFpSent(true);
       setFpLineSent(!!data?.lineSent);
       toast.success(t.resetEmailSent);
