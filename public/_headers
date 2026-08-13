@@ -1,0 +1,9 @@
+# index.html — allow stale serving on network failure so iOS Chrome/Firefox
+# doesn't show "Can't open this page" when the CDN is briefly unreachable.
+# The JS/CSS assets all have content-hash filenames so they get long caches.
+/index.html
+  Cache-Control: public, max-age=0, stale-while-revalidate=60, stale-if-error=86400
+
+# Long-lived immutable cache for hashed assets (Vite content-addressed output).
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
