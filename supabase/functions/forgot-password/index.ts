@@ -1,24 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ALLOWED_ORIGINS = new Set([
-  "https://wilan-stockcheck.pages.dev",
-  "http://localhost:5173",
-  "http://localhost:3000",
-  "http://localhost:4173",
-]);
-
 Deno.serve(async (req) => {
-  const origin = req.headers.get("origin") ?? "";
-  const allowOrigin = ALLOWED_ORIGINS.has(origin)
-    ? origin
-    : "https://wilan-stockcheck.pages.dev";
-
   const cors: Record<string, string> = {
-    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    Vary: "Origin",
   };
 
   const respond = (body: unknown, status = 200): Response =>
