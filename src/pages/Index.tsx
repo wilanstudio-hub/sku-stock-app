@@ -2,16 +2,19 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLang } from "@/hooks/useLang";
+import { useFontSize } from "@/hooks/useFontSize";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SkuTable } from "@/components/SkuTable";
 import { TransactionHistoryDialog } from "@/components/TransactionHistoryDialog";
-import { LinkSheetDialog } from "@/components/LinkSheetDialog";
+import { ManageDepartmentsDialog } from "@/components/ManageDepartmentsDialog";
+import { ManageSheetsDialog } from "@/components/ManageSheetsDialog";
+import { Landing } from "@/components/Landing";
 import { cn } from "@/lib/utils";
 import {
   LogIn, LogOut, Package, Clapperboard, Shirt, Camera,
-  ShieldCheck, ClipboardList, Plus,
+  ShieldCheck, ClipboardList, Plus, Edit2
 } from "lucide-react";
 import type { Department } from "@/hooks/useAuth";
 
@@ -30,52 +33,70 @@ const DEPT_ICONS: Record<Department, React.ReactNode> = {
 
 const Index = () => {
   const { user, loading, roles, canView, signOut } = useAuth();
+  const { tenant } = useTenant();
   const { lang, setLang, t } = useLang();
+  const { fontSize, setFontSize } = useFontSize();
   const nav = useNavigate();
   const isAdmin = roles.includes("admin");
 
-  const [txHistoryOpen,    setTxHistoryOpen]   = useState(false);
-  const [linkSheetOpen,    setLinkSheetOpen]    = useState(false);
+  const [txHistoryOpen, setTxHistoryOpen] = useState(false);
+  
+  // Dynamic Departments State
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [activeDept, setActiveDept] = useState<string>("");
+  const [manageDeptsOpen, setManageDeptsOpen] = useState(false);
+  const [manageSheetsOpen, setManageSheetsOpen] = useState(false);
   const [registeredSheets, setRegisteredSheets] = useState<RegisteredSheet[]>([]);
-
-  // Primary department tab
-  const [activeDept, setActiveDept] = useState<Department | "">("");
 
   // ── Data loaders ──────────────────────────────────────────────────────────
 
-  const loadRegisteredSheets = async () => {
+  const loadDepartments = async () => {
+    const { data } = await supabase.from("departments").select("*").order("order_index");
+    setDepartments(data ?? []);
+  };
+
+  const loadRegisteredSheets = async (deptCode: string) => {
     const { data } = await supabase
       .from("google_sheets_registry")
       .select("id, name, sheet_id, sku_prefix")
-      .eq("department", "equipment")
+      .eq("department", deptCode)
       .eq("is_active", true)
       .order("sku_prefix");
     setRegisteredSheets((data ?? []) as RegisteredSheet[]);
   };
 
   useEffect(() => {
-    if (!user) { setRegisteredSheets([]); return; }
-    loadRegisteredSheets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+    if (user) loadDepartments();
+  }, [user]);
+
+  useEffect(() => {
+    if (activeDept) loadRegisteredSheets(activeDept);
+  }, [activeDept]);
 
   // ── Primary-tab initialisation ────────────────────────────────────────────
 
-  const visibleDepts = (["art", "wd", "equipment"] as Department[]).filter(canView);
+  // Filter departments based on user roles
+  const visibleDepts = departments.filter(d => canView(d.code as any));
 
   useEffect(() => {
-    if (visibleDepts.length > 0 && !visibleDepts.includes(activeDept as Department)) {
-      setActiveDept(visibleDepts[0]);
+    if (visibleDepts.length > 0 && !visibleDepts.find(d => d.code === activeDept)) {
+      setActiveDept(visibleDepts[0].code);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleDepts.join(",")]);
+  }, [departments, roles]); // re-run when departments or roles change
 
   // ── Derived values ────────────────────────────────────────────────────────
 
-  const deptLabel: Record<Department, string> = {
-    art: t.tabArt,
-    wd:  t.tabWd,
-    equipment: t.tabEquipment,
+  const activeDeptObj = departments.find(d => d.code === activeDept);
+
+  const renderIcon = (iconName: string) => {
+    const props = { className: "w-4 h-4 shrink-0" };
+    switch (iconName) {
+      case "clapperboard": return <Clapperboard {...props} />;
+      case "shirt": return <Shirt {...props} />;
+      case "camera": return <Camera {...props} />;
+      case "package": return <Package {...props} />;
+      default: return <Package {...props} />;
+    }
   };
 
   // Main equipment sheet — accept "" or legacy "B-" as the warehouse prefix.
@@ -83,13 +104,12 @@ const Index = () => {
     .filter((s) => s.sku_prefix === "" || s.sku_prefix === "B-")
     .sort((a, b) => a.sku_prefix.length - b.sku_prefix.length)[0];
 
-  // Admin-only button to register a new Google Sheet into the Equipment ecosystem.
-  // Rendered between the stats cards and the toolbar row via the subNav slot.
-  const equipAdminAction = isAdmin ? (
+  // Admin-only button to manage sheets for the current department.
+  const deptAdminAction = isAdmin && activeDept ? (
     <div className="flex justify-end pb-1">
       <button
-        onClick={() => setLinkSheetOpen(true)}
-        title="เพิ่ม Google Sheet ใหม่เป็นแท็บ"
+        onClick={() => setManageSheetsOpen(true)}
+        title={`จัดการคลัง Google Sheets (${activeDeptObj?.name_th})`}
         className={cn(
           "inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium",
           "border border-dashed transition-colors",
@@ -97,14 +117,14 @@ const Index = () => {
         )}
       >
         <Plus className="w-3 h-3" />
-        เพิ่มคลัง
+        จัดการคลัง
       </button>
     </div>
   ) : undefined;
 
   // ── Early return: loading ─────────────────────────────────────────────────
 
-  if (loading) {
+  if (loading || (user && departments.length === 0)) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted-foreground">
         {t.loading}
@@ -130,15 +150,54 @@ const Index = () => {
               <Package className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-bold leading-tight">SKU Stock</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="font-bold leading-tight">{tenant?.name || "FilmFlow-Inventory"}</h1>
+                {tenant && (
+                  <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-primary/5 text-primary border-primary/20">
+                    {tenant.slug}
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground font-th">{t.appSubtitle}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            <div className="flex items-center border border-border rounded overflow-hidden">
+              <button
+                onClick={() => setFontSize("normal")}
+                title="ขนาดปกติ"
+                className={cn(
+                  "flex items-center justify-center px-2.5 h-7 text-xs font-semibold transition-colors",
+                  fontSize === "normal" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
+                )}
+              >
+                A
+              </button>
+              <button
+                onClick={() => setFontSize("large")}
+                title="ขนาดใหญ่"
+                className={cn(
+                  "flex items-center justify-center px-2.5 h-7 text-sm font-semibold border-l border-border transition-colors",
+                  fontSize === "large" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
+                )}
+              >
+                A+
+              </button>
+              <button
+                onClick={() => setFontSize("xlarge")}
+                title="ขนาดใหญ่พิเศษ"
+                className={cn(
+                  "flex items-center justify-center px-2.5 h-7 text-base font-semibold border-l border-border transition-colors",
+                  fontSize === "xlarge" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
+                )}
+              >
+                A++
+              </button>
+            </div>
             <button
               onClick={() => setLang(lang === "th" ? "en" : "th")}
-              className="text-xs font-mono px-2 py-1 rounded border border-border hover:bg-accent transition-colors"
+              className="text-xs font-mono px-2 h-7 rounded border border-border hover:bg-accent transition-colors"
             >
               {lang === "th" ? "EN" : "TH"}
             </button>
@@ -188,24 +247,35 @@ const Index = () => {
         </div>
 
         {/* Primary department tab strip */}
-        {user && visibleDepts.length > 0 && (
-          <div className="flex border-t overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+        {user && (
+          <div className="flex border-t overflow-x-auto items-center pr-2" style={{ scrollbarWidth: "none" }}>
             {visibleDepts.map((dept) => (
               <button
-                key={dept}
-                onClick={() => setActiveDept(dept)}
+                key={dept.code}
+                onClick={() => setActiveDept(dept.code)}
                 className={cn(
                   "flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium",
                   "whitespace-nowrap shrink-0 border-b-2 -mb-px transition-colors",
-                  activeDept === dept
+                  activeDept === dept.code
                     ? "border-primary text-primary bg-primary/5"
                     : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50",
                 )}
               >
-                {DEPT_ICONS[dept]}
-                {deptLabel[dept]}
+                {renderIcon(dept.icon)}
+                {dept.name_th}
               </button>
             ))}
+            
+            {isAdmin && (
+              <button
+                onClick={() => setManageDeptsOpen(true)}
+                title="จัดการแท็บหลัก (หมวดหมู่)"
+                className="ml-auto flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-full hover:bg-accent transition-colors border border-transparent hover:border-border"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                จัดการแท็บหลัก
+              </button>
+            )}
           </div>
         )}
       </header>
@@ -213,16 +283,8 @@ const Index = () => {
       {/* ── Main content ───────────────────────────────────────────────────── */}
       <main className="container mx-auto px-4 py-6">
 
-        {/* Not signed in */}
-        {!user && (
-          <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-            <Package className="w-12 h-12 text-muted-foreground opacity-30" />
-            <p className="text-muted-foreground">{t.pleaseSignIn}</p>
-            <Button onClick={() => nav("/auth")} className="gap-2">
-              <LogIn className="w-4 h-4" /> {t.signIn}
-            </Button>
-          </div>
-        )}
+        {/* Not signed in: Show Landing Page */}
+        {!user && <Landing />}
 
         {/* Signed in but no accessible sections */}
         {user && visibleDepts.length === 0 && (
@@ -233,39 +295,39 @@ const Index = () => {
           </div>
         )}
 
-        {/* Art — keep mounted while tab is active; pause loading when user is
-            temporarily null so we avoid the unmount→remount flash that wipes
-            in-progress fetches and resets the loading spinner on every auth
-            state cycle (token refresh briefly fires SIGNED_OUT on mobile). */}
-        {activeDept === "art" && (
-          <SkuTable key="art" department="art" enabled={!!user} />
-        )}
-
-        {/* WD */}
-        {activeDept === "wd" && (
-          <SkuTable key="wd" department="wd" enabled={!!user} />
-        )}
-
-        {/* Equipment */}
-        {activeDept === "equipment" && (
+        {/* Render active department dynamically */}
+        {user && activeDeptObj && (
           <SkuTable
-            key="equipment"
-            department="equipment"
+            key={activeDeptObj.code}
+            department={activeDeptObj.code as any}
             sheetId={mainSheet?.sheet_id}
-            subNav={equipAdminAction}
+            subNav={deptAdminAction}
             enabled={!!user}
+            syncFormat={activeDeptObj.sync_format}
           />
         )}
+
       </main>
 
       <TransactionHistoryDialog open={txHistoryOpen} onOpenChange={setTxHistoryOpen} />
 
       {isAdmin && (
-        <LinkSheetDialog
-          open={linkSheetOpen}
-          onOpenChange={setLinkSheetOpen}
-          onLinked={() => { loadRegisteredSheets(); }}
-        />
+        <>
+          <ManageDepartmentsDialog
+            open={manageDeptsOpen}
+            onOpenChange={setManageDeptsOpen}
+            onUpdated={loadDepartments}
+          />
+          {activeDeptObj && (
+            <ManageSheetsDialog
+              open={manageSheetsOpen}
+              onOpenChange={setManageSheetsOpen}
+              departmentCode={activeDeptObj.code}
+              departmentName={activeDeptObj.name_th}
+              onUpdated={() => loadRegisteredSheets(activeDeptObj.code)}
+            />
+          )}
+        </>
       )}
     </div>
   );

@@ -43,7 +43,7 @@ export function ProductLabel({ sku, className = "" }: Props) {
       {/* ── QR Code ──────────────────────────────────────────── */}
       <div className="flex justify-center py-1">
         <QRCodeSVG
-          value={sku.sku_code}
+          value={`${typeof window !== "undefined" ? window.location.origin : ""}/scan?sku=${encodeURIComponent(sku.sku_code)}`}
           size={128}
           marginSize={1}
           className="rounded"

@@ -14,10 +14,82 @@ export type Database = {
   }
   public: {
     Tables: {
+      companies: {
+        Row: {
+          id: string
+          slug: string
+          name: string
+          status: string
+          contact_name: string | null
+          contact_email: string | null
+          logo_url: string | null
+          subscription_expires_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          slug: string
+          name: string
+          status?: string
+          contact_name?: string | null
+          contact_email?: string | null
+          logo_url?: string | null
+          subscription_expires_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          slug?: string
+          name?: string
+          status?: string
+          contact_name?: string | null
+          contact_email?: string | null
+          logo_url?: string | null
+          subscription_expires_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      departments: {
+        Row: {
+          code: string
+          created_at: string | null
+          icon: string | null
+          id: string
+          is_active: boolean | null
+          name_th: string
+          order_index: number | null
+          sync_format: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name_th: string
+          order_index?: number | null
+          sync_format?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name_th?: string
+          order_index?: number | null
+          sync_format?: string | null
+        }
+        Relationships: []
+      }
       google_sheets_registry: {
         Row: {
           created_at: string
-          department: Database["public"]["Enums"]["department"]
+          department: string
           id: string
           is_active: boolean
           name: string
@@ -27,7 +99,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          department: Database["public"]["Enums"]["department"]
+          department: string
           id?: string
           is_active?: boolean
           name: string
@@ -37,7 +109,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          department?: Database["public"]["Enums"]["department"]
+          department?: string
           id?: string
           is_active?: boolean
           name?: string
@@ -120,7 +192,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           current_status: string | null
-          department: Database["public"]["Enums"]["department"]
+          department: string
           id: string
           image_url: string | null
           image_urls: string[]
@@ -146,7 +218,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           current_status?: string | null
-          department: Database["public"]["Enums"]["department"]
+          department: string
           id?: string
           image_url?: string | null
           image_urls?: string[]
@@ -172,7 +244,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           current_status?: string | null
-          department?: Database["public"]["Enums"]["department"]
+          department?: string
           id?: string
           image_url?: string | null
           image_urls?: string[]
@@ -197,7 +269,7 @@ export type Database = {
         Row: {
           created_at: string
           deleted: number
-          department: Database["public"]["Enums"]["department"]
+          department: string
           errors: string[]
           id: string
           inserted: number
@@ -208,7 +280,7 @@ export type Database = {
         Insert: {
           created_at?: string
           deleted?: number
-          department: Database["public"]["Enums"]["department"]
+          department: string
           errors?: string[]
           id?: string
           inserted?: number
@@ -219,7 +291,7 @@ export type Database = {
         Update: {
           created_at?: string
           deleted?: number
-          department?: Database["public"]["Enums"]["department"]
+          department?: string
           errors?: string[]
           id?: string
           inserted?: number
@@ -252,17 +324,17 @@ export type Database = {
       }
       viewer_section_access: {
         Row: {
-          department: Database["public"]["Enums"]["department"]
+          department: string
           id: string
           user_id: string
         }
         Insert: {
-          department: Database["public"]["Enums"]["department"]
+          department: string
           id?: string
           user_id: string
         }
         Update: {
-          department?: Database["public"]["Enums"]["department"]
+          department?: string
           id?: string
           user_id?: string
         }

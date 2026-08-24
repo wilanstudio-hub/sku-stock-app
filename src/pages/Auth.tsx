@@ -97,7 +97,7 @@ const Auth = () => {
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-3" style={{ background: "var(--gradient-hero)" }}>
             <Package className="w-7 h-7 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold">SKU Stock</h1>
+          <h1 className="text-2xl font-bold">FilmFlow-Inventory</h1>
           <p className="text-sm text-muted-foreground font-th">{t.appSubtitle}</p>
           <button
             onClick={() => setLang(lang === "th" ? "en" : "th")}

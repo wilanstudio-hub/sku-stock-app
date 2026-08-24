@@ -1,14 +1,16 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SignJWT, importPKCS8 } from "npm:jose";
 
 const ALLOWED_ORIGINS = new Set([
   "https://wilan-stockcheck.pages.dev",
   "http://localhost:5173",
   "http://localhost:3000",
   "http://localhost:4173",
+  "http://localhost:8080",
 ]);
 
 // Fallback sheet used when no registry row exists (main warehouse, no prefix).
-const DEFAULT_SHEET_ID = "10JzJsTHJaahqsJ0xFtGxOQX_Q0pPuHxuRQiXN-_jr-w";
+const DEFAULT_SHEET_ID = Deno.env.get("DEFAULT_EQUIPMENT_SHEET_ID") || "";
 
 // Meta/template tabs that never contain inventory rows — skip them.
 const SKIP_TABS = new Set([
@@ -59,15 +61,54 @@ function lookupTabConfig(name: string): { prefix: string; schema: "standard" | "
 }
 
 function normalizeTitle(raw: string): string {
-  return String(raw).replace(/[­​‌‍⁠﻿]/g, "").replace(/\s+/g, " ").trim();
+  return String(raw).replace(/[\u00ad\u200b\u200c\u200d\u2060\ufeff]/g, "").replace(/\s+/g, " ").trim();
+}
+
+async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
+  const tokenUrl = "https://oauth2.googleapis.com/token";
+  
+  // Format the private key correctly, handling escaped newlines if passed via env var
+  const formattedKey = privateKey.replace(/\\n/g, "\n");
+  const privateKeyObj = await importPKCS8(formattedKey, "RS256");
+  
+  const jwt = await new SignJWT({
+    iss: clientEmail,
+    scope: "https://www.googleapis.com/auth/spreadsheets.readonly",
+    aud: tokenUrl,
+  })
+    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(privateKeyObj);
+
+  const response = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt,
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error("Failed to get Google access token: " + JSON.stringify(data));
+  }
+  
+  return data.access_token;
 }
 
 async function fetchAllTabs(
   sheetId: string,
-  apiKey: string,
+  accessToken: string,
 ): Promise<{ name: string; gid: string; prefix: string; schema: "standard" | "charging" }[]> {
   const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties&key=${apiKey}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      }
+    }
   );
   if (!res.ok) {
     const body = await res.text();
@@ -76,10 +117,11 @@ async function fetchAllTabs(
   const meta = await res.json();
   return (meta.sheets as any[])
     .map((s: any) => {
-      const name = normalizeTitle(s.properties.title);
+      const originalName = s.properties.title;
+      const name = normalizeTitle(originalName);
       const gid = String(s.properties.sheetId);
       const config = lookupTabConfig(name) ?? deriveTabConfig(name, gid);
-      return { name, gid, ...config };
+      return { name, originalName, gid, ...config };
     })
     .filter((t) => t.name !== "" && !SKIP_TABS.has(t.name));
 }
@@ -122,7 +164,7 @@ const CHG = { status: 1, qty: 2, name: 3, date: 4 };
 const LOC_KEYWORDS = ["location", "loc.", "ที่เก็บ", "มีนบุรี", "สาขา"];
 
 function normalizeCell(raw: unknown): string {
-  return String(raw ?? "").replace(/[­​‌‍⁠﻿]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  return String(raw ?? "").replace(/[\u00ad\u200b\u200c\u200d\u2060\ufeff]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 const HEADER_IDENT_RE = /^(no\.?|sku|#)$/i;
@@ -204,13 +246,10 @@ function findDataStart(rows: string[][]): { dataStart: number; colMap: ColMap } 
 }
 
 Deno.serve(async (req) => {
-  const origin = req.headers.get("origin") ?? "";
-  const allowOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "https://wilan-stockcheck.pages.dev";
   const cors: Record<string, string> = {
-    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    Vary: "Origin",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
   };
 
   const respond = (body: unknown, status = 200) =>
@@ -221,15 +260,28 @@ Deno.serve(async (req) => {
 
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
+  if (req.method === "GET") {
+    const supaAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const url = new URL(req.url);
+    const departmentCode = url.searchParams.get("department") || "equipment";
+    const { data } = await supaAdmin.from("sync_logs").select("errors").eq("department", departmentCode).order("created_at", { ascending: false }).limit(1);
+    return respond(data);
+  }
+
   try {
     let dryRun = false;
     let bodySheetId: string | undefined;
+    let departmentCode = "equipment";
 
     if (req.method === "POST") {
       try {
         const body = await req.json();
         dryRun = !!body?.dryRun;
         bodySheetId = body?.sheetId ?? undefined;
+        if (body?.department) departmentCode = body.department;
       } catch { /* no body */ }
     }
 
@@ -244,11 +296,11 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsErr } = await supaUser.auth.getClaims(token);
-    if (claimsErr || !claims?.claims) {
+    const { data: { user }, error: userErr } = await supaUser.auth.getUser(token);
+    if (userErr || !user) {
       return respond({ error: "Unauthorized" }, 401);
     }
-    const userId = claims.claims.sub;
+    const userId = user.id;
 
     const supaAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -260,10 +312,10 @@ Deno.serve(async (req) => {
       .select("role")
       .eq("user_id", userId);
     const allowed = (userRoles ?? []).some(
-      (r: any) => r.role === "admin" || r.role === "equipment",
+      (r: any) => r.role === "admin" || r.role === departmentCode,
     );
     if (!allowed) {
-      return respond({ error: "ต้องมีสิทธิ์ Equipment หรือ Admin" }, 403);
+      return respond({ error: `ต้องมีสิทธิ์ ${departmentCode} หรือ Admin` }, 403);
     }
 
     // ── Resolve which sheet + prefix to use ─────────────────────────────────
@@ -275,7 +327,7 @@ Deno.serve(async (req) => {
         .from("google_sheets_registry")
         .select("sheet_id, sku_prefix")
         .eq("sheet_id", bodySheetId)
-        .eq("department", "equipment")
+        .eq("department", departmentCode)
         .eq("is_active", true)
         .single();
 
@@ -289,7 +341,7 @@ Deno.serve(async (req) => {
       const { data: mainRows } = await supaAdmin
         .from("google_sheets_registry")
         .select("sheet_id, sku_prefix")
-        .eq("department", "equipment")
+        .eq("department", departmentCode)
         .eq("is_active", true)
         .in("sku_prefix", ["", "B-"]);
 
@@ -300,26 +352,41 @@ Deno.serve(async (req) => {
       sheetToSync = (mainRow?.sheet_id as string) ?? DEFAULT_SHEET_ID;
       skuPrefix = (mainRow?.sku_prefix as string) ?? "";
     }
+
+    if (!sheetToSync) {
+      return respond({ error: `ไม่พบ Google Sheet สำหรับแผนก ${departmentCode} กรุณาตั้งค่า Google Sheet ID ในหน้าจัดการชีทหรือจัดการแผนก` }, 400);
+    }
+
     // Strip any accidental "B-" prefix — all equipment SKUs must be "EQ-*" only.
     skuPrefix = skuPrefix.replace(/^B-/i, "");
     // ────────────────────────────────────────────────────────────────────────
 
-    const apiKey = Deno.env.get("GOOGLE_SHEETS_API_KEY");
-    if (!apiKey) throw new Error("GOOGLE_SHEETS_API_KEY secret is not set");
-    const TABS = await fetchAllTabs(sheetToSync, apiKey);
+    const clientEmail = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
+    const privateKey = Deno.env.get("GOOGLE_PRIVATE_KEY");
+
+    if (!clientEmail || !privateKey) {
+      throw new Error("GOOGLE_SERVICE_ACCOUNT_EMAIL or GOOGLE_PRIVATE_KEY secret is not set");
+    }
+
+    const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
+    const TABS = await fetchAllTabs(sheetToSync, accessToken);
 
     const errors: string[] = [];
     const tabData: { tab: typeof TABS[0]; rows: string[][]; dataStart: number; colMap: ColMap }[] = [];
     for (const tab of TABS) {
       try {
-        const url = `https://docs.google.com/spreadsheets/d/${sheetToSync}/gviz/tq?tqx=out:csv&gid=${tab.gid}`;
-        const res = await fetch(url);
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetToSync}/values/${encodeURIComponent("'" + tab.originalName + "'")}`;
+        const res = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          }
+        });
         if (!res.ok) {
           errors.push(`[WARN] ${tab.name}: fetch failed (${res.status})`);
           continue;
         }
-        const csv = await res.text();
-        const rows = parseCSV(csv);
+        const json = await res.json();
+        const rows = (json.values as string[][]) || [];
 
         const { dataStart, colMap } = tab.schema === "standard"
           ? findDataStart(rows)
@@ -339,7 +406,7 @@ Deno.serve(async (req) => {
         const { data: page } = await supaAdmin
           .from("skus")
           .select("sku_code")
-          .eq("department", "equipment")
+          .eq("department", departmentCode)
           .like("sku_code", pattern)
           .range(from, from + 999);
         if (!page?.length) break;
@@ -412,7 +479,7 @@ Deno.serve(async (req) => {
             : `${skuPrefix}EQ-${tab.prefix}-${String(seq).padStart(3, "0")}`;
           sheetSkus.add(sku);
           const record: any = {
-            department: "equipment",
+            department: departmentCode,
             sku_code: sku,
             name_th: name,
             name_en: name,
@@ -449,7 +516,7 @@ Deno.serve(async (req) => {
           if (status) noteParts.push(`Status: ${status}`);
           if (dateCell) noteParts.push(`Charge Date: ${dateCell}`);
           const record: any = {
-            department: "equipment",
+            department: departmentCode,
             sku_code: sku,
             name_th: name,
             name_en: name,
@@ -520,7 +587,7 @@ Deno.serve(async (req) => {
           const { error } = await supaAdmin
             .from("skus")
             .delete()
-            .eq("department", "equipment")
+            .eq("department", departmentCode)
             .in("sku_code", chunk);
           if (error) errors.push(`cleanup: ${error.message}`);
           else deleted += chunk.length;
@@ -532,7 +599,7 @@ Deno.serve(async (req) => {
 
     if (!dryRun) {
       await supaAdmin.from("sync_logs").insert({
-        department: "equipment",
+        department: departmentCode,
         inserted,
         updated,
         deleted,

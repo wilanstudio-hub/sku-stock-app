@@ -79,17 +79,20 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
     }
     let cancelled = false;
     setLoading(true);
-    supabase
-      .from("sku_transactions")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200)
-      .then(({ data }) => {
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("sku_transactions")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(200);
         const fetched = (data ?? []) as SkuTransaction[];
         txCache = { rows: fetched, ts: Date.now() };
         if (!cancelled) setRows(fetched);
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
     return () => { cancelled = true; };
   }, [open]);
 

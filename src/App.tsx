@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { LangProvider } from "@/hooks/useLang";
+import { FontSizeProvider } from "@/hooks/useFontSize";
+import { TenantProvider } from "@/contexts/TenantContext";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
 import AdminPage from "./pages/AdminPage.tsx";
@@ -27,18 +29,22 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <LangProvider>
-        <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/scan" element={<ScanPage />} />
-            <Route path="/update-password" element={<UpdatePassword />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-        </LangProvider>
+        <TenantProvider>
+          <FontSizeProvider>
+            <LangProvider>
+              <AuthProvider>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/auth" element={<Auth />} />
+                  <Route path="/admin" element={<AdminPage />} />
+                  <Route path="/scan" element={<ScanPage />} />
+                  <Route path="/update-password" element={<UpdatePassword />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </AuthProvider>
+            </LangProvider>
+          </FontSizeProvider>
+        </TenantProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

@@ -1,15 +1,16 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SignJWT, importPKCS8 } from "npm:jose";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SHEET_ID = "1ZVRs-havfr9b--LYYSdXDODKmNbiHBCQZpuswM3DFog";
-
 const SKIP_TABS = new Set([
   "Lists", "Wardrobe", "README", "Template", "Overview", "Summary", "Index",
 ]);
+
+const DEFAULT_SHEET_ID = Deno.env.get("DEFAULT_WD_SHEET_ID") || "";
 
 function parseDriveUrl(raw: string): string | null {
   if (!raw?.trim()) return null;
@@ -23,20 +24,49 @@ function parseDriveUrl(raw: string): string | null {
 }
 
 function normalizeTitle(raw: string): string {
-  return String(raw).replace(/[­​‌‍⁠﻿]/g, "").replace(/\s+/g, " ").trim();
+  return String(raw).replace(/[\u00ad\u200b\u200c\u200d\u2060\ufeff]/g, "").replace(/\s+/g, " ").trim();
 }
 
-async function fetchAllTabs(sheetId: string, apiKey: string): Promise<{ name: string; gid: string }[]> {
+
+async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
+  const tokenUrl = "https://oauth2.googleapis.com/token";
+  const formattedKey = privateKey.replace(/\\n/g, "\n");
+  const privateKeyObj = await importPKCS8(formattedKey, "RS256");
+  const jwt = await new SignJWT({
+    iss: clientEmail,
+    scope: "https://www.googleapis.com/auth/spreadsheets.readonly",
+    aud: tokenUrl,
+  })
+    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(privateKeyObj);
+  const response = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error("Failed to get Google access token: " + JSON.stringify(data));
+  return data.access_token;
+}
+
+async function fetchAllTabs(sheetId: string, accessToken: string): Promise<{ name: string; gid: string }[]> {
   const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties&key=${apiKey}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties`, { headers: { Authorization: `Bearer ${accessToken}` } },
   );
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Google Sheets API ${res.status}: ${body}`);
+    let message = `Google Sheets API ${res.status}: ${body}`;
+    try {
+      const json = JSON.parse(body);
+      if (json.error?.message) message = json.error.message;
+    } catch { /* ignore */ }
+    throw new Error(message);
   }
   const meta = await res.json();
   return (meta.sheets as any[])
-    .map((s: any) => ({ name: normalizeTitle(s.properties.title), gid: String(s.properties.sheetId) }))
+    .map((s: any) => ({ originalName: s.properties.title, name: normalizeTitle(s.properties.title), gid: String(s.properties.sheetId) }))
     .filter((t) => t.name !== "" && !SKIP_TABS.has(t.name) && !t.name.toLowerCase().startsWith("copy of"));
 }
 
@@ -72,19 +102,22 @@ type TabResult = {
 };
 
 async function processTab(
-  tab: { name: string; gid: string },
+  tab: { originalName: string; name: string; gid: string },
   sheetId: string,
   existingSet: Set<string>,
   userId: string,
+  departmentCode: string,
+  accessToken: string
 ): Promise<TabResult> {
   const tabName = tab.name;
-  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${tab.gid}`;
-  const res = await fetch(url);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("'" + tab.originalName + "'")}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) {
-    return { tabName, insertRecords: [], updateRecords: [], sheetSkusInTab: [], stat: { inserted: 0, updated: 0 }, error: `${tabName}: HTTP ${res.status}` };
+    const errorBody = await res.text().catch(() => "");
+    return { tabName, insertRecords: [], updateRecords: [], sheetSkusInTab: [], stat: { inserted: 0, updated: 0 }, error: `${tabName}: HTTP ${res.status} ${errorBody.substring(0, 100)}` };
   }
-  const csv = await res.text();
-  const rows = parseCSV(csv);
+  const json = await res.json();
+  const rows = (json.values as string[][]) || [];
   if (rows.length < 2) return { tabName, insertRecords: [], updateRecords: [], sheetSkusInTab: [], stat: { inserted: 0, updated: 0 } };
 
   const header = rows[0].map((h) => h.trim());
@@ -105,6 +138,7 @@ async function processTab(
   const iRemark = idx("Remark");
   const iImage  = [
     "Image", "Photo", "Photos", "Picture", "Pictures",
+    "WD PHOTO (Front)", "WD PHOTO", "WD PHOTO (Side)", "WD PHOTO (Group)",
     "Image URL", "Image Link", "Photo URL", "Drive Link", "Drive URL", "Link",
     "รูปภาพ", "รูป", "ลิงค์รูปภาพ", "ลิงก์รูปภาพ", "ลิงค์รูป", "ลิงก์รูป",
     "ลิงค์", "ลิงก์", "URL รูป", "URL รูปภาพ", "Google Drive", "ลิงค์ Google Drive",
@@ -150,7 +184,7 @@ async function processTab(
     ].filter(Boolean).join(" | ");
 
     const record: any = {
-      department: "wd", sku_code: sku, name_th: desc, name_en: desc, category: tabName,
+      department: departmentCode, sku_code: sku, name_th: desc, name_en: desc, category: tabName,
       color: iColor >= 0 ? ((row[iColor] ?? "").trim() || null) : null,
       style: iStyle >= 0 ? ((row[iStyle] ?? "").trim() || null) : null,
       location: iLoc >= 0 ? ((row[iLoc] ?? "").trim() || null) : null,
@@ -167,10 +201,41 @@ async function processTab(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  if (req.method === "GET") {
+    const supaAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const url = new URL(req.url);
+    const departmentCode = url.searchParams.get("department") || "wd";
+    const { data } = await supaAdmin.from("sync_logs").select("errors").eq("department", departmentCode).order("created_at", { ascending: false }).limit(1);
+    return new Response(JSON.stringify(data), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
+
+  if (req.method === "GET") {
+    const supaAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const url = new URL(req.url);
+    const departmentCode = url.searchParams.get("department") || "wd";
+    const { data } = await supaAdmin.from("sync_logs").select("errors").eq("department", departmentCode).order("created_at", { ascending: false }).limit(1);
+    return new Response(JSON.stringify(data), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
   try {
     let dryRun = false;
+    let bodySheetId: string | undefined;
+    let departmentCode = "wd";
+    let bodySheetId: string | undefined;
+    let departmentCode = "wd";
+
     if (req.method === "POST") {
-      try { const body = await req.json(); dryRun = !!body?.dryRun; } catch { /* no body */ }
+      try { 
+        const body = await req.json(); 
+        dryRun = !!body?.dryRun; 
+        bodySheetId = body?.sheetId;
+        if (body?.department) departmentCode = body.department;
+      } catch { /* no body */ }
     }
 
     const authHeader = req.headers.get("Authorization");
@@ -185,33 +250,51 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsErr } = await supaUser.auth.getClaims(token);
-    if (claimsErr || !claims?.claims) {
+    const { data: { user }, error: userErr } = await supaUser.auth.getUser(token);
+    if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const userId = claims.claims.sub;
+    const userId = user.id;
 
     const supaAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: roles } = await supaAdmin.from("user_roles").select("role").eq("user_id", userId);
-    if (!(roles ?? []).some((r: any) => r.role === "admin" || r.role === "wd")) {
-      return new Response(JSON.stringify({ error: "ต้องมีสิทธิ์ WD หรือ Admin" }), {
+    if (!(roles ?? []).some((r: any) => r.role === "admin" || r.role === departmentCode)) {
+      return new Response(JSON.stringify({ error: `ต้องมีสิทธิ์ ${departmentCode} หรือ Admin` }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const apiKey = Deno.env.get("GOOGLE_SHEETS_API_KEY");
-    if (!apiKey) throw new Error("GOOGLE_SHEETS_API_KEY secret is not set");
+    const clientEmail = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
+    const privateKey = Deno.env.get("GOOGLE_PRIVATE_KEY");
+    if (!clientEmail || !privateKey) throw new Error("GOOGLE_SERVICE_ACCOUNT_EMAIL or GOOGLE_PRIVATE_KEY not set");
+    const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
+    
+    let sheetToSync = DEFAULT_SHEET_ID;
+    if (bodySheetId) {
+      const { data: regRow } = await supaAdmin.from("google_sheets_registry").select("sheet_id").eq("sheet_id", bodySheetId).eq("department", departmentCode).eq("is_active", true).single();
+      if (regRow) sheetToSync = regRow.sheet_id as string;
+    } else {
+      const { data: mainRows } = await supaAdmin.from("google_sheets_registry").select("sheet_id").eq("department", departmentCode).eq("is_active", true).eq("sku_prefix", "");
+      if (mainRows && mainRows.length > 0) sheetToSync = mainRows[0].sheet_id as string;
+    }
+
+    if (!sheetToSync) {
+      return new Response(
+        JSON.stringify({ error: `ไม่พบ Google Sheet สำหรับแผนก ${departmentCode} กรุณาตั้งค่า Google Sheet ID ในหน้าจัดการชีทหรือจัดการแผนก` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // ── Phase 1: fetch tab list + existing SKUs in parallel ───────────────────
-    const [TABS, existingSet] = await Promise.all([
-      fetchAllTabs(SHEET_ID, apiKey),
+    const [TABS, existingPage] = await Promise.all([
+      fetchAllTabs(sheetToSync, accessToken),
       (async () => {
         const set = new Set<string>();
         for (let from = 0; ; from += 1000) {
           const { data: page } = await supaAdmin
-            .from("skus").select("sku_code").eq("department", "wd").range(from, from + 999);
+            .from("skus").select("sku_code").eq("department", departmentCode).range(from, from + 999);
           if (!page?.length) break;
           for (const r of page) set.add(r.sku_code);
           if (page.length < 1000) break;
@@ -219,10 +302,11 @@ Deno.serve(async (req) => {
         return set;
       })(),
     ]);
+    const existingSet = existingPage;
 
     // ── Phase 2: fetch + parse ALL tabs in parallel ───────────────────────────
     const tabResults = await Promise.all(
-      TABS.map((tab) => processTab(tab, SHEET_ID, existingSet, userId)),
+      TABS.map((tab) => processTab(tab, sheetToSync, existingSet, userId, departmentCode, accessToken)),
     );
 
     // ── Phase 3: collect results ──────────────────────────────────────────────
@@ -259,13 +343,13 @@ Deno.serve(async (req) => {
       for (let i = 0; i < orphanedSkus.length; i += 500) {
         const chunk = orphanedSkus.slice(i, i + 500);
         const { error } = await supaAdmin
-          .from("skus").delete().eq("department", "wd").in("sku_code", chunk);
+          .from("skus").delete().eq("department", departmentCode).in("sku_code", chunk);
         if (error) errors.push(`cleanup: ${error.message}`);
         else deleted += chunk.length;
       }
 
       await supaAdmin.from("sync_logs").insert({
-        department: "wd", inserted, updated, deleted,
+        department: departmentCode, inserted, updated, deleted,
         per_category: perTab, errors, triggered_by: userId,
       });
     } else {
@@ -279,7 +363,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return new Response(JSON.stringify({ error: msg }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

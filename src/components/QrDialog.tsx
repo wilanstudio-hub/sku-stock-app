@@ -186,7 +186,7 @@ export const QrDialog = ({ open, onOpenChange, sku }: Props) => {
     ${sku.location ? `<div class="location"><span class="loc-key">LOC &nbsp;</span>${sku.location}</div>` : ""}
     <div class="dept">${deptText}</div>
   </div>
-  <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 500); }<\/script>
+  <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 500); }</script>
 </body></html>`);
     w.document.close();
   };

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -19,18 +19,18 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 220 25% 12%;
 
-    --primary: 18 90% 52%;
-    --primary-foreground: 40 30% 97%;
-    --primary-glow: 18 95% 62%;
+    --primary: 270 70% 45%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 270 70% 55%;
 
-    --secondary: 200 80% 25%;
-    --secondary-foreground: 40 30% 97%;
+    --secondary: 270 50% 95%;
+    --secondary-foreground: 270 70% 45%;
 
     --muted: 40 15% 92%;
     --muted-foreground: 220 10% 40%;
 
-    --accent: 45 95% 55%;
-    --accent-foreground: 220 25% 12%;
+    --accent: 270 80% 95%;
+    --accent-foreground: 270 70% 45%;
 
     --destructive: 0 75% 50%;
     --destructive-foreground: 40 30% 97%;
@@ -43,15 +43,15 @@ All colors MUST be HSL.
 
     --border: 30 15% 85%;
     --input: 30 15% 88%;
-    --ring: 18 90% 52%;
+    --ring: 270 70% 45%;
 
     --radius: 0.75rem;
 
-    --gradient-hero: linear-gradient(135deg, hsl(18 90% 52%), hsl(35 95% 55%));
-    --gradient-art: linear-gradient(135deg, hsl(340 80% 55%), hsl(18 90% 52%));
-    --gradient-wd: linear-gradient(135deg, hsl(200 80% 25%), hsl(180 70% 40%));
+    --gradient-hero: linear-gradient(135deg, hsl(270 70% 45%), hsl(285 70% 55%));
+    --gradient-art: linear-gradient(135deg, hsl(340 80% 55%), hsl(270 70% 45%));
+    --gradient-wd: linear-gradient(135deg, hsl(200 80% 25%), hsl(270 70% 45%));
     --shadow-soft: 0 4px 20px -4px hsl(220 25% 12% / 0.08);
-    --shadow-elegant: 0 10px 40px -10px hsl(18 90% 52% / 0.25);
+    --shadow-elegant: 0 10px 40px -10px hsl(270 70% 45% / 0.25);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -73,8 +73,8 @@ All colors MUST be HSL.
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 270 70% 65%;
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -90,10 +90,10 @@ All colors MUST be HSL.
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --ring: 270 70% 65%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary: 270 70% 65%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 3.7% 15.9%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
@@ -106,7 +106,7 @@ All colors MUST be HSL.
   * { @apply border-border; }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Space Grotesk', 'IBM Plex Sans Thai', system-ui, sans-serif;
+    font-family: 'Inter', 'Noto Sans Thai', system-ui, sans-serif;
   }
-  .font-th { font-family: 'IBM Plex Sans Thai', sans-serif; }
+  .font-th { font-family: 'Noto Sans Thai', sans-serif; }
 }

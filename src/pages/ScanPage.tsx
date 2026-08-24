@@ -77,7 +77,7 @@ export default function ScanPage() {
   const [submitError, setSubmitError]     = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const fetchData = () => {
+  const fetchData = async () => {
     if (!skuCode) {
       setError("ไม่พบรหัสสินค้าใน URL");
       setLoading(false);
@@ -87,26 +87,31 @@ export default function ScanPage() {
     setLoading(true);
     setTxLoading(true);
 
-    supabase
-      .from("skus")
-      .select("*")
-      .eq("sku_code", skuCode)
-      .maybeSingle()
-      .then(({ data, error: e }) => {
-        if (e) { setError(e.message); return; }
-        if (!data) { setError(`ไม่พบสินค้ารหัส "${skuCode}"`); return; }
-        setSku(data as Sku);
-      })
-      .finally(() => setLoading(false));
+    try {
+      const [{ data, error: e }, { data: txData }] = await Promise.all([
+        supabase.from("skus").select("*").eq("sku_code", skuCode).maybeSingle(),
+        supabase
+          .from("sku_transactions")
+          .select("*")
+          .eq("sku_code", skuCode)
+          .order("created_at", { ascending: false })
+          .limit(50),
+      ]);
 
-    supabase
-      .from("sku_transactions")
-      .select("*")
-      .eq("sku_code", skuCode)
-      .order("created_at", { ascending: false })
-      .limit(50)
-      .then(({ data }) => setTransactions((data ?? []) as SkuTransaction[]))
-      .finally(() => setTxLoading(false));
+      if (e) {
+        setError(e.message);
+      } else if (!data) {
+        setError(`ไม่พบสินค้ารหัส "${skuCode}"`);
+      } else {
+        setSku(data as Sku);
+      }
+      setTransactions((txData ?? []) as SkuTransaction[]);
+    } catch (err: any) {
+      setError(err?.message ?? "เกิดข้อผิดพลาดในการโหลดข้อมูล");
+    } finally {
+      setLoading(false);
+      setTxLoading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, [skuCode]);

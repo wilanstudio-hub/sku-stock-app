@@ -44,12 +44,16 @@ Deno.serve(async (req) => {
 
   // Generate recovery link. Return success even if email not found to prevent
   // email enumeration on this internal tool.
+  const appUrl = Deno.env.get("APP_URL") || "https://filmflow-inventory.pages.dev";
+  const appName = Deno.env.get("APP_NAME") || "FilmFlow Inventory";
+  const resendFrom = Deno.env.get("RESEND_FROM") || "FilmFlow Inventory <noreply@wilanstudioresend.xyz>";
+
   let recoveryLink: string;
   try {
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: "recovery",
       email,
-      options: { redirectTo: "https://wilan-stockcheck.pages.dev/update-password" },
+      options: { redirectTo: `${appUrl}/update-password` },
     });
     if (error || !data?.properties?.action_link) {
       return respond({ success: true, lineSent: false });
@@ -90,14 +94,13 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Wilan Studio <noreply@wilanstudioresend.xyz>",
+        from: resendFrom,
         to: [email],
-        subject: "รีเซ็ตรหัสผ่าน — Wilan Studio",
+        subject: `รีเซ็ตรหัสผ่าน — ${appName}`,
         html: `
           <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;color:#1a1a1a;">
             <div style="margin-bottom:24px;">
-              <span style="font-size:22px;font-weight:700;">SKU Stock</span>
-              <span style="font-size:14px;color:#888;margin-left:8px;">by Wilan Studio</span>
+              <span style="font-size:22px;font-weight:700;">${appName}</span>
             </div>
             <h2 style="margin:0 0 8px;font-size:20px;">รีเซ็ตรหัสผ่าน</h2>
             <p style="color:#555;margin:0 0 24px;">คลิกปุ่มด้านล่างเพื่อตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ</p>
@@ -145,7 +148,7 @@ Deno.serve(async (req) => {
             messages: [
               {
                 type: "text",
-                text: `🔐 รีเซ็ตรหัสผ่าน — Wilan Studio SKU Stock\n\nคลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่:\n\n${recoveryLink}\n\n⏱ ลิงก์หมดอายุใน 1 ชั่วโมง`,
+                text: `🔐 รีเซ็ตรหัสผ่าน — Wilan Studio FilmFlow-Inventory\n\nคลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่:\n\n${recoveryLink}\n\n⏱ ลิงก์หมดอายุใน 1 ชั่วโมง`,
               },
             ],
           }),

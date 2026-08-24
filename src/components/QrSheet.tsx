@@ -75,7 +75,7 @@ export function buildPrintWindow(items: Sku[], qrRefs: Map<string, HTMLCanvasEle
 </head>
 <body>
   <div class="grid">${cells}</div>
-  <script>window.onload = () => { setTimeout(() => window.print(), 300); }<\/script>
+  <script>window.onload = () => { setTimeout(() => window.print(), 300); }</script>
 </body></html>`);
   w.document.close();
 }

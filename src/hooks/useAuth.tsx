@@ -2,8 +2,8 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-type Role = "admin" | "art" | "wd" | "equipment" | "viewer";
-export type Department = "art" | "wd" | "equipment";
+type Role = "admin" | "art" | "wd" | "equipment" | "viewer" | string;
+export type Department = "art" | "wd" | "equipment" | string;
 
 interface AuthCtx {
   user: User | null;

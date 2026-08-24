@@ -8,8 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, ShieldCheck, X, Clapperboard, Shirt, Camera } from "lucide-react";
+import { ArrowLeft, ShieldCheck, X, Clapperboard, Shirt, Camera, RefreshCw, Link as LinkIcon, Building2, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import type { Company } from "@/contexts/TenantContext";
 
 type AppRole = "admin" | "art" | "wd" | "equipment" | "viewer";
 type Dept = "art" | "wd" | "equipment";
@@ -40,7 +42,12 @@ export default function AdminPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [userRoles, setUserRoles] = useState<RoleRow[]>([]);
   const [sectionAccess, setSectionAccess] = useState<AccessRow[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Google Sheets Sync state
+  const [sheetUrl, setSheetUrl] = useState("");
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !roles.includes("admin")) nav("/", { replace: true });
@@ -48,14 +55,16 @@ export default function AdminPage() {
 
   const load = async () => {
     setLoading(true);
-    const [{ data: p }, { data: r }, { data: a }] = await Promise.all([
+    const [{ data: p }, { data: r }, { data: a }, { data: c }] = await Promise.all([
       supabase.from("profiles").select("user_id, display_name"),
       supabase.from("user_roles").select("id, user_id, role"),
       supabase.from("viewer_section_access").select("id, user_id, department"),
+      supabase.from("companies").select("*").order("created_at", { ascending: false }),
     ]);
     setProfiles((p ?? []) as Profile[]);
     setUserRoles((r ?? []) as RoleRow[]);
     setSectionAccess((a ?? []) as AccessRow[]);
+    setCompanies((c ?? []) as Company[]);
     setLoading(false);
   };
 
@@ -98,6 +107,79 @@ export default function AdminPage() {
     }
   };
 
+  const extractSheetId = (url: string) => {
+    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    return match ? match[1] : null;
+  };
+
+  const handleSyncSheet = async () => {
+    if (!sheetUrl) return toast.error("กรุณาวางลิงก์ Google Sheets");
+    
+    const sheetId = extractSheetId(sheetUrl);
+    if (!sheetId) return toast.error("ลิงก์ไม่ถูกต้อง กรุณาตรวจสอบลิงก์ Google Sheets อีกครั้ง");
+
+    setSyncing(true);
+    const toastId = toast.loading("กำลังเตรียมการ Sync ข้อมูล...");
+
+    try {
+      // 1. Register the sheet if not already registered
+      const { data: existingSheet } = await supabase.from("google_sheets_registry")
+        .select("id")
+        .eq("sheet_id", sheetId)
+        .eq("department", "equipment")
+        .maybeSingle();
+
+      if (!existingSheet) {
+        const { error: regError } = await supabase.from("google_sheets_registry").insert({
+          sheet_id: sheetId,
+          department: "equipment",
+          is_active: true,
+          sku_prefix: "",
+          name: "Synced from Admin"
+        });
+        if (regError) throw new Error("ไม่สามารถลงทะเบียน Sheet ได้: " + regError.message);
+      }
+
+      toast.loading("กำลังดึงและอัปเดตข้อมูล... (อาจใช้เวลาสักครู่)", { id: toastId });
+
+      // 2. Trigger the edge function
+      const { data, error } = await supabase.functions.invoke("sync-equipment-sheet", {
+        body: { sheetId }
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(`Sync สำเร็จ! เพิ่ม ${data.inserted} รายการ, อัปเดต ${data.updated} รายการ`, { id: toastId });
+      setSheetUrl("");
+    } catch (err: any) {
+      toast.error(err.message || "เกิดข้อผิดพลาดในการ Sync", { id: toastId });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const updateCompanyStatus = async (id: string, status: string) => {
+    const { error } = await supabase.from("companies").update({ status }).eq("id", id);
+    if (error) {
+      toast.error("ไม่สามารถอัปเดตสถานะได้: " + error.message);
+    } else {
+      toast.success(`อัปเดตสถานะเป็น ${status} สำเร็จ`);
+      load();
+    }
+  };
+
+  const deleteCompany = async (id: string, name: string) => {
+    if (!window.confirm(`ต้องการลบสตูดิโอ "${name}" ออกจากระบบหรือไม่?`)) return;
+    const { error } = await supabase.from("companies").delete().eq("id", id);
+    if (error) {
+      toast.error("ไม่สามารถลบสตูดิโอได้: " + error.message);
+    } else {
+      toast.success("ลบสตูดิโอแล้ว");
+      load();
+    }
+  };
+
   if (authLoading || loading) {
     return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading...</div>;
   }
@@ -116,7 +198,144 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6 max-w-4xl">
+      <main className="container mx-auto px-4 py-6 max-w-4xl space-y-6">
+        {/* Multi-Tenant SaaS Studios Management */}
+        <Card className="border-border">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-primary" />
+                สตูดิโอในระบบ SaaS Multi-Tenant ({companies.length})
+              </CardTitle>
+              <Badge variant="outline" className="text-xs font-mono">
+                Subdomain Architecture
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {companies.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">ยังไม่มีสตูดิโอลงทะเบียนในระบบ</p>
+            ) : (
+              <div className="divide-y rounded-lg border">
+                {companies.map((c) => (
+                  <div key={c.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm">{c.name}</span>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] uppercase font-mono ${
+                            c.status === "active"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : c.status === "pending"
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : "bg-red-50 text-red-700 border-red-200"
+                          }`}
+                        >
+                          {c.status}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded">
+                          slug: {c.slug}
+                        </span>
+                        {c.contact_email && <span>อีเมล: {c.contact_email}</span>}
+                        {c.contact_name && <span>ผู้ติดต่อ: {c.contact_name}</span>}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-center">
+                      <a
+                        href={`/?tenant=${c.slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline px-2 py-1 rounded border hover:bg-muted"
+                      >
+                        <ExternalLink className="w-3 h-3" /> เปิด Workspace
+                      </a>
+                      {c.status === "pending" && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700"
+                          onClick={() => updateCompanyStatus(c.id, "active")}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> อนุมัติ
+                        </Button>
+                      )}
+                      {c.status === "active" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs text-amber-600 hover:bg-amber-50"
+                          onClick={() => updateCompanyStatus(c.id, "suspended")}
+                        >
+                          ระงับ
+                        </Button>
+                      )}
+                      {c.status === "suspended" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs text-emerald-600 hover:bg-emerald-50"
+                          onClick={() => updateCompanyStatus(c.id, "active")}
+                        >
+                          เปิดใช้งาน
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteCompany(c.id, c.name)}
+                        title="ลบสตูดิโอ"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        {/* Google Sheets Sync */}
+        <Card className="mb-6 border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 text-primary" />
+              ซิงก์ข้อมูลจาก Google Sheets (Equipment)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-3">
+              วางลิงก์ Google Sheets ที่คุณต้องการซิงก์ข้อมูลสต๊อก (อย่าลืมแชร์สิทธิ์ Viewer ให้กับอีเมลบอท: <code className="bg-muted px-1.5 py-0.5 rounded text-xs select-all">filmflow-sheet-sync-bot@filmflow-inventory-sync.iam.gserviceaccount.com</code> ก่อนกด Sync)
+            </p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="https://docs.google.com/spreadsheets/d/1234567890/edit"
+                  value={sheetUrl}
+                  onChange={(e) => setSheetUrl(e.target.value)}
+                  className="pl-9"
+                  disabled={syncing}
+                />
+              </div>
+              <Button onClick={handleSyncSheet} disabled={syncing}>
+                {syncing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    กำลังซิงก์...
+                  </>
+                ) : (
+                  "Sync ข้อมูล"
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Legend */}
         <Card className="mb-6">
           <CardContent className="pt-4 pb-3">

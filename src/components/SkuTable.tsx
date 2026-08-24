@@ -79,9 +79,11 @@ interface Props {
   /** When false the table stays mounted but skips all data fetching. Prevents
    *  unmount/remount flash when the parent briefly loses auth state. */
   enabled?: boolean;
+  /** Optional format identifier to override default sync function selection. */
+  syncFormat?: string;
 }
 
-export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNav, onCategoriesChange, enabled = true }: Props) => {
+export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNav, onCategoriesChange, enabled = true, syncFormat }: Props) => {
   const { user, canEdit } = useAuth();
   const { t, lang } = useLang();
   const editable = canEdit(department);
@@ -112,7 +114,9 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
   const [page, setPage] = useState(0);
   const qrSheetRef = useRef<QrSheetHandle>(null);
 
-  const fnName = department === "art" ? "sync-art-sheets" : department === "equipment" ? "sync-equipment-sheet" : department === "wd" ? "sync-wd-sheets" : null;
+  // Use syncFormat if provided, otherwise guess from department name
+  const format = syncFormat || (department === "art" ? "art" : department === "wd" ? "wd" : "equipment");
+  const fnName = format === "art" ? "sync-art-sheets" : format === "wd" ? "sync-wd-sheets" : "sync-equipment-sheet";
 
   const runSync = async (dryRun: boolean) => {
     if (!editable) {
@@ -120,8 +124,8 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
       return null;
     }
     if (!fnName) return null;
-    const body: Record<string, unknown> = { dryRun };
-    if (department === "equipment" && sheetId) body.sheetId = sheetId;
+    const body: Record<string, unknown> = { dryRun, department };
+    if (sheetId) body.sheetId = sheetId;
     const { data, error } = await supabase.functions.invoke(fnName, { body });
     if (error) throw error;
     if (data?.error) throw new Error(data.error);
