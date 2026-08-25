@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/contexts/TenantContext";
 import { useLang } from "@/hooks/useLang";
 import { useFontSize } from "@/hooks/useFontSize";
 import { supabase } from "@/integrations/supabase/client";
