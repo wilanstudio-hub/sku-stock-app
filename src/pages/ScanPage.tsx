@@ -142,6 +142,8 @@ export default function ScanPage() {
     const [txResult, skuResult] = await Promise.all([
       supabase.from("sku_transactions").insert({
         sku_code:    sku.sku_code,
+        sku_id:      sku.id,
+        company_id:  sku.company_id,
         department:  sku.department,
         action_type: actionType,
         person_name: personName.trim(),
@@ -149,7 +151,7 @@ export default function ScanPage() {
       supabase
         .from("skus")
         .update({ current_status: nextStatus, last_handler: personName.trim() })
-        .eq("sku_code", sku.sku_code),
+        .eq("id", sku.id),
     ]);
 
     if (txResult.error || skuResult.error) {

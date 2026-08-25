@@ -236,7 +236,12 @@ Deno.serve(async (req) => {
     const userId = user.id;
 
     const supaAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data: roles } = await supaAdmin.from("user_roles").select("role").eq("user_id", userId);
+    const [{ data: roles }, { data: profile }] = await Promise.all([
+      supaAdmin.from("user_roles").select("role").eq("user_id", userId),
+      supaAdmin.from("profiles").select("company_id").eq("user_id", userId).maybeSingle(),
+    ]);
+
+    const companyId = profile?.company_id || null;
     if (!(roles ?? []).some((r: any) => r.role === "admin" || r.role === departmentCode)) {
       return new Response(JSON.stringify({ error: `ต้องมีสิทธิ์ ${departmentCode} หรือ Admin` }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -250,10 +255,14 @@ Deno.serve(async (req) => {
     
     let sheetToSync = DEFAULT_SHEET_ID;
     if (bodySheetId) {
-      const { data: regRow } = await supaAdmin.from("google_sheets_registry").select("sheet_id").eq("sheet_id", bodySheetId).eq("department", departmentCode).eq("is_active", true).single();
+      const query = supaAdmin.from("google_sheets_registry").select("sheet_id").eq("sheet_id", bodySheetId).eq("department", departmentCode).eq("is_active", true);
+      if (companyId) query.eq("company_id", companyId);
+      const { data: regRow } = await query.single();
       if (regRow) sheetToSync = regRow.sheet_id as string;
     } else {
-      const { data: mainRows } = await supaAdmin.from("google_sheets_registry").select("sheet_id").eq("department", departmentCode).eq("is_active", true).eq("sku_prefix", "");
+      const query = supaAdmin.from("google_sheets_registry").select("sheet_id").eq("department", departmentCode).eq("is_active", true).eq("sku_prefix", "");
+      if (companyId) query.eq("company_id", companyId);
+      const { data: mainRows } = await query;
       if (mainRows && mainRows.length > 0) sheetToSync = mainRows[0].sheet_id as string;
     }
 
@@ -270,8 +279,9 @@ Deno.serve(async (req) => {
       (async () => {
         const set = new Set<string>();
         for (let from = 0; ; from += 1000) {
-          const { data: page } = await supaAdmin
-            .from("skus").select("sku_code").eq("department", departmentCode).range(from, from + 999);
+          const q = supaAdmin.from("skus").select("sku_code").eq("department", departmentCode);
+          if (companyId) q.eq("company_id", companyId);
+          const { data: page } = await q.range(from, from + 999);
           if (!page?.length) break;
           for (const r of page) set.add(r.sku_code);
           if (page.length < 1000) break;
@@ -298,8 +308,8 @@ Deno.serve(async (req) => {
 
     for (const r of tabResults) {
       if (r.error) errors.push(r.error);
-      allInsert.push(...r.insertRecords);
-      allUpdate.push(...r.updateRecords);
+      for (const rec of r.insertRecords) allInsert.push({ ...rec, company_id: companyId });
+      for (const rec of r.updateRecords) allUpdate.push({ ...rec, company_id: companyId });
       for (const s of r.sheetSkusInTab) sheetSkus.add(s);
       perTab[r.tabName] = r.stat;
       inserted += r.stat.inserted;
@@ -312,7 +322,7 @@ Deno.serve(async (req) => {
       for (let i = 0; i < allRecords.length; i += 500) {
         const chunk = allRecords.slice(i, i + 500);
         const { error } = await supaAdmin
-          .from("skus").upsert(chunk, { onConflict: "sku_code", ignoreDuplicates: false });
+          .from("skus").upsert(chunk, { onConflict: "company_id,sku_code", ignoreDuplicates: false });
         if (error) errors.push(`upsert: ${error.message}`);
       }
 
@@ -321,8 +331,9 @@ Deno.serve(async (req) => {
       let deleted = 0;
       for (let i = 0; i < orphanedSkus.length; i += 500) {
         const chunk = orphanedSkus.slice(i, i + 500);
-        const { error } = await supaAdmin
-          .from("skus").delete().eq("department", departmentCode).in("sku_code", chunk);
+        const q = supaAdmin.from("skus").delete().eq("department", departmentCode).in("sku_code", chunk);
+        if (companyId) q.eq("company_id", companyId);
+        const { error } = await q;
         if (error) errors.push(`cleanup: ${error.message}`);
         else deleted += chunk.length;
       }

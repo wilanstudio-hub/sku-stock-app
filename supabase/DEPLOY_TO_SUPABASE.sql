@@ -166,3 +166,71 @@ DO $$ BEGIN
     USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+-- ==============================================================================
+-- 11. Multi-Tenant Company Isolation (Model B) Schema & RLS
+-- ==============================================================================
+
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id) ON DELETE SET NULL;
+UPDATE public.profiles SET company_id = (SELECT id FROM public.companies WHERE slug = 'wilan' LIMIT 1) WHERE company_id IS NULL;
+
+ALTER TABLE public.departments ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id) ON DELETE CASCADE;
+UPDATE public.departments SET company_id = (SELECT id FROM public.companies WHERE slug = 'wilan' LIMIT 1) WHERE company_id IS NULL;
+
+DO $$ BEGIN
+  ALTER TABLE public.departments DROP CONSTRAINT IF EXISTS departments_code_key;
+  ALTER TABLE public.departments DROP CONSTRAINT IF EXISTS unique_company_dept_code;
+  ALTER TABLE public.departments ADD CONSTRAINT unique_company_dept_code UNIQUE (company_id, code);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+ALTER TABLE public.google_sheets_registry ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id) ON DELETE CASCADE;
+UPDATE public.google_sheets_registry SET company_id = (SELECT id FROM public.companies WHERE slug = 'wilan' LIMIT 1) WHERE company_id IS NULL;
+
+DO $$ BEGIN
+  ALTER TABLE public.google_sheets_registry DROP CONSTRAINT IF EXISTS unique_dept_sku_prefix;
+  ALTER TABLE public.google_sheets_registry DROP CONSTRAINT IF EXISTS unique_company_dept_sku_prefix;
+  ALTER TABLE public.google_sheets_registry ADD CONSTRAINT unique_company_dept_sku_prefix UNIQUE (company_id, department, sku_prefix);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+ALTER TABLE public.skus ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id) ON DELETE CASCADE;
+UPDATE public.skus SET company_id = (SELECT id FROM public.companies WHERE slug = 'wilan' LIMIT 1) WHERE company_id IS NULL;
+
+DO $$ BEGIN
+  ALTER TABLE public.skus DROP CONSTRAINT IF EXISTS skus_sku_code_key;
+  ALTER TABLE public.skus DROP CONSTRAINT IF EXISTS unique_company_sku_code;
+  ALTER TABLE public.skus ADD CONSTRAINT unique_company_sku_code UNIQUE (company_id, sku_code);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+ALTER TABLE public.sku_transactions ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id) ON DELETE CASCADE;
+UPDATE public.sku_transactions SET company_id = (SELECT id FROM public.companies WHERE slug = 'wilan' LIMIT 1) WHERE company_id IS NULL;
+
+ALTER TABLE public.viewer_section_access ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id) ON DELETE CASCADE;
+UPDATE public.viewer_section_access SET company_id = (SELECT id FROM public.companies WHERE slug = 'wilan' LIMIT 1) WHERE company_id IS NULL;
+
+DO $$ BEGIN
+  ALTER TABLE public.viewer_section_access DROP CONSTRAINT IF EXISTS viewer_section_access_user_id_department_key;
+  ALTER TABLE public.viewer_section_access DROP CONSTRAINT IF EXISTS unique_company_user_dept_access;
+  ALTER TABLE public.viewer_section_access ADD CONSTRAINT unique_company_user_dept_access UNIQUE (company_id, user_id, department);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id) ON DELETE CASCADE;
+UPDATE public.user_roles SET company_id = (SELECT id FROM public.companies WHERE slug = 'wilan' LIMIT 1) WHERE company_id IS NULL;
+
+CREATE OR REPLACE FUNCTION public.get_user_company_id(uid uuid)
+RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT company_id FROM public.profiles WHERE user_id = uid LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION public.has_company_role(uid uuid, required_role text, target_company uuid DEFAULT NULL)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id = uid
+      AND ur.role = required_role
+      AND (target_company IS NULL OR ur.company_id = target_company OR ur.company_id IS NULL)
+  );
+$$;

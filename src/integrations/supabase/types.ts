@@ -56,6 +56,7 @@ export type Database = {
       departments: {
         Row: {
           code: string
+          company_id: string | null
           created_at: string | null
           icon: string | null
           id: string
@@ -66,6 +67,7 @@ export type Database = {
         }
         Insert: {
           code: string
+          company_id?: string | null
           created_at?: string | null
           icon?: string | null
           id?: string
@@ -76,6 +78,7 @@ export type Database = {
         }
         Update: {
           code?: string
+          company_id?: string | null
           created_at?: string | null
           icon?: string | null
           id?: string
@@ -88,6 +91,7 @@ export type Database = {
       }
       google_sheets_registry: {
         Row: {
+          company_id: string | null
           created_at: string
           department: string
           id: string
@@ -98,6 +102,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           department: string
           id?: string
@@ -108,6 +113,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           department?: string
           id?: string
@@ -121,6 +127,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          company_id: string | null
           created_at: string
           department: string | null
           display_name: string | null
@@ -129,6 +136,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           department?: string | null
           display_name?: string | null
@@ -137,6 +145,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           department?: string | null
           display_name?: string | null
@@ -149,6 +158,7 @@ export type Database = {
       sku_transactions: {
         Row: {
           action_type: string
+          company_id: string | null
           created_at: string
           department: string
           id: string
@@ -158,6 +168,7 @@ export type Database = {
         }
         Insert: {
           action_type: string
+          company_id?: string | null
           created_at?: string
           department: string
           id?: string
@@ -167,6 +178,7 @@ export type Database = {
         }
         Update: {
           action_type?: string
+          company_id?: string | null
           created_at?: string
           department?: string
           id?: string
@@ -189,6 +201,7 @@ export type Database = {
           availability: string
           category: string | null
           color: string | null
+          company_id: string | null
           created_at: string
           created_by: string | null
           current_status: string | null
@@ -215,6 +228,7 @@ export type Database = {
           availability?: string
           category?: string | null
           color?: string | null
+          company_id?: string | null
           created_at?: string
           created_by?: string | null
           current_status?: string | null
@@ -241,6 +255,7 @@ export type Database = {
           availability?: string
           category?: string | null
           color?: string | null
+          company_id?: string | null
           created_at?: string
           created_by?: string | null
           current_status?: string | null
@@ -303,18 +318,21 @@ export type Database = {
       }
       user_roles: {
         Row: {
+          company_id: string | null
           created_at: string
           id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           id?: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
@@ -324,16 +342,19 @@ export type Database = {
       }
       viewer_section_access: {
         Row: {
+          company_id: string | null
           department: string
           id: string
           user_id: string
         }
         Insert: {
+          company_id?: string | null
           department: string
           id?: string
           user_id: string
         }
         Update: {
+          company_id?: string | null
           department?: string
           id?: string
           user_id?: string

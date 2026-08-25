@@ -307,10 +307,12 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: userRoles } = await supaAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
+    const [{ data: userRoles }, { data: profile }] = await Promise.all([
+      supaAdmin.from("user_roles").select("role").eq("user_id", userId),
+      supaAdmin.from("profiles").select("company_id").eq("user_id", userId).maybeSingle(),
+    ]);
+
+    const companyId = profile?.company_id || null;
     const allowed = (userRoles ?? []).some(
       (r: any) => r.role === "admin" || r.role === departmentCode,
     );
@@ -323,13 +325,15 @@ Deno.serve(async (req) => {
     let skuPrefix: string;
 
     if (bodySheetId) {
-      const { data: regRow, error: regErr } = await supaAdmin
+      const query = supaAdmin
         .from("google_sheets_registry")
         .select("sheet_id, sku_prefix")
         .eq("sheet_id", bodySheetId)
         .eq("department", departmentCode)
-        .eq("is_active", true)
-        .single();
+        .eq("is_active", true);
+      if (companyId) query.eq("company_id", companyId);
+
+      const { data: regRow, error: regErr } = await query.single();
 
       if (regErr || !regRow) {
         return respond({ error: "ไม่พบ Sheet ในระบบ หรือถูกปิดใช้งานแล้ว" }, 400);
@@ -338,12 +342,15 @@ Deno.serve(async (req) => {
       skuPrefix = (regRow.sku_prefix as string) ?? "";
     } else {
       // Default: main sheet — accept sku_prefix = '' or the legacy 'B-' value.
-      const { data: mainRows } = await supaAdmin
+      const query = supaAdmin
         .from("google_sheets_registry")
         .select("sheet_id, sku_prefix")
         .eq("department", departmentCode)
         .eq("is_active", true)
         .in("sku_prefix", ["", "B-"]);
+      if (companyId) query.eq("company_id", companyId);
+
+      const { data: mainRows } = await query;
 
       const mainRow = (mainRows ?? []).sort((a, b) =>
         (a.sku_prefix as string).length - (b.sku_prefix as string).length
@@ -553,7 +560,7 @@ Deno.serve(async (req) => {
       // one batch payload.
       const dedupBySkuCode = (records: any[]): any[] => {
         const seen = new Map<string, any>();
-        for (const r of records) seen.set(r.sku_code, r);
+        for (const r of records) seen.set(r.sku_code, { ...r, company_id: companyId });
         return Array.from(seen.values());
       };
 
@@ -564,7 +571,7 @@ Deno.serve(async (req) => {
           try {
             const { error } = await supaAdmin
               .from("skus")
-              .upsert(chunk, { onConflict: "sku_code", ignoreDuplicates: false });
+              .upsert(chunk, { onConflict: "company_id,sku_code", ignoreDuplicates: false });
             if (error) errors.push(`upsert: ${error.message}`);
           } catch (upsertErr) {
             errors.push(`upsert exception: ${upsertErr instanceof Error ? upsertErr.message : String(upsertErr)}`);
@@ -584,11 +591,13 @@ Deno.serve(async (req) => {
       if (!dryRun) {
         for (let i = 0; i < orphanedSkus.length; i += 500) {
           const chunk = orphanedSkus.slice(i, i + 500);
-          const { error } = await supaAdmin
+          const q = supaAdmin
             .from("skus")
             .delete()
             .eq("department", departmentCode)
             .in("sku_code", chunk);
+          if (companyId) q.eq("company_id", companyId);
+          const { error } = await q;
           if (error) errors.push(`cleanup: ${error.message}`);
           else deleted += chunk.length;
         }

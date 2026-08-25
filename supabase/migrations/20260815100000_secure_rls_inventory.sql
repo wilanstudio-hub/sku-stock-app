@@ -2,6 +2,7 @@
 
 -- 1. profiles
 DROP POLICY IF EXISTS "Profiles viewable by authenticated" ON public.profiles;
+DROP POLICY IF EXISTS "Users view own profile" ON public.profiles;
 CREATE POLICY "Users view own profile"
   ON public.profiles FOR SELECT TO authenticated
   USING (auth.uid() = user_id);
@@ -9,6 +10,7 @@ CREATE POLICY "Users view own profile"
 -- 2. skus
 DROP POLICY IF EXISTS "Authenticated view skus" ON public.skus;
 DROP POLICY IF EXISTS "Public read skus by sku_code" ON public.skus;
+DROP POLICY IF EXISTS "Users view dept skus" ON public.skus;
 
 CREATE POLICY "Users view dept skus"
   ON public.skus FOR SELECT TO authenticated
@@ -21,6 +23,7 @@ CREATE POLICY "Users view dept skus"
 
 -- 3. sync_logs
 DROP POLICY IF EXISTS "Authenticated view sync_logs" ON public.sync_logs;
+DROP POLICY IF EXISTS "Users view dept sync_logs" ON public.sync_logs;
 CREATE POLICY "Users view dept sync_logs"
   ON public.sync_logs FOR SELECT TO authenticated
   USING (
@@ -33,16 +36,16 @@ CREATE POLICY "Users view dept sync_logs"
 -- 4. sku_transactions
 DROP POLICY IF EXISTS "auth_select_transactions" ON public.sku_transactions;
 DROP POLICY IF EXISTS "anon_select_transactions" ON public.sku_transactions;
+DROP POLICY IF EXISTS "Users view dept transactions" ON public.sku_transactions;
 CREATE POLICY "Users view dept transactions"
   ON public.sku_transactions FOR SELECT TO authenticated
   USING (
     public.has_role(auth.uid(), 'admin')
-    -- Assuming sku_transactions join with skus or have a department field
-    -- If not, restricting to admin or authenticated with a role is safer.
   );
 
 -- 5. google_sheets_registry
 DROP POLICY IF EXISTS "registry_select_authenticated" ON public.google_sheets_registry;
+DROP POLICY IF EXISTS "Admins and equipment view registry" ON public.google_sheets_registry;
 CREATE POLICY "Admins and equipment view registry"
   ON public.google_sheets_registry FOR SELECT TO authenticated
   USING (
@@ -51,6 +54,7 @@ CREATE POLICY "Admins and equipment view registry"
 
 -- 6. departments
 DROP POLICY IF EXISTS "departments_select_authenticated" ON public.departments;
+DROP POLICY IF EXISTS "Users view departments" ON public.departments;
 CREATE POLICY "Users view departments"
   ON public.departments FOR SELECT TO authenticated
   USING (auth.uid() IS NOT NULL);

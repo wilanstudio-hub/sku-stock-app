@@ -8,6 +8,7 @@ export type Department = "art" | "wd" | "equipment" | string;
 interface AuthCtx {
   user: User | null;
   session: Session | null;
+  companyId: string | null;
   roles: Role[];
   viewerAccess: Department[];
   loading: boolean;
@@ -21,6 +22,7 @@ const Ctx = createContext<AuthCtx | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [companyId, setCompanyId] = useState<string | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [viewerAccess, setViewerAccess] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,12 +33,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (loadedForUid.current === uid) return;
     loadedForUid.current = uid;
     try {
-      const [{ data: roleData }, { data: accessData }] = await Promise.all([
+      const [{ data: roleData }, { data: accessData }, { data: profileData }] = await Promise.all([
         supabase.from("user_roles").select("role").eq("user_id", uid),
         supabase.from("viewer_section_access").select("department").eq("user_id", uid),
+        supabase.from("profiles").select("company_id").eq("user_id", uid).maybeSingle(),
       ]);
       setRoles((roleData?.map((r) => r.role as Role)) ?? []);
       setViewerAccess((accessData?.map((a) => a.department as Department)) ?? []);
+      setCompanyId(profileData?.company_id ?? null);
     } finally {
       setLoading(false);
     }
@@ -107,7 +111,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <Ctx.Provider value={{ user, session, roles, viewerAccess, loading, canView, canEdit, signOut }}>
+    <Ctx.Provider value={{ user, session, companyId, roles, viewerAccess, loading, canView, canEdit, signOut }}>
       {children}
     </Ctx.Provider>
   );
