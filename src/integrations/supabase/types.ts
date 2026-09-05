@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      billing_events: {
+        Row: {
+          provider: string
+          event_id: string
+          event_type: string
+          status: string
+          company_id: string | null
+          received_at: string
+          processed_at: string | null
+          error_message: string | null
+        }
+        Insert: {
+          provider: string
+          event_id: string
+          event_type: string
+          status?: string
+          company_id?: string | null
+          received_at?: string
+          processed_at?: string | null
+          error_message?: string | null
+        }
+        Update: {
+          provider?: string
+          event_id?: string
+          event_type?: string
+          status?: string
+          company_id?: string | null
+          received_at?: string
+          processed_at?: string | null
+          error_message?: string | null
+        }
+        Relationships: []
+      }
       companies: {
         Row: {
           id: string
@@ -24,6 +57,13 @@ export type Database = {
           contact_email: string | null
           logo_url: string | null
           subscription_expires_at: string | null
+          billing_plan?: string | null
+          billing_status?: string | null
+          billing_provider?: string | null
+          billing_customer_id?: string | null
+          billing_subscription_id?: string | null
+          billing_expires_at?: string | null
+          seat_limit?: number | null
           created_at: string
           updated_at: string
         }
@@ -36,6 +76,13 @@ export type Database = {
           contact_email?: string | null
           logo_url?: string | null
           subscription_expires_at?: string | null
+          billing_plan?: string | null
+          billing_status?: string | null
+          billing_provider?: string | null
+          billing_customer_id?: string | null
+          billing_subscription_id?: string | null
+          billing_expires_at?: string | null
+          seat_limit?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -48,6 +95,13 @@ export type Database = {
           contact_email?: string | null
           logo_url?: string | null
           subscription_expires_at?: string | null
+          billing_plan?: string | null
+          billing_status?: string | null
+          billing_provider?: string | null
+          billing_customer_id?: string | null
+          billing_subscription_id?: string | null
+          billing_expires_at?: string | null
+          seat_limit?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -154,6 +208,94 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      inventory_reservations: {
+        Row: {
+          id: string
+          company_id: string
+          external_project_id: string
+          external_project_name: string
+          status: "reserved" | "checked_out" | "cancelled" | "returned"
+          start_at: string
+          end_at: string
+          requested_by: string
+          idempotency_key: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          external_project_id: string
+          external_project_name: string
+          status?: "reserved" | "checked_out" | "cancelled" | "returned"
+          start_at: string
+          end_at: string
+          requested_by: string
+          idempotency_key: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          external_project_id?: string
+          external_project_name?: string
+          status?: "reserved" | "checked_out" | "cancelled" | "returned"
+          start_at?: string
+          end_at?: string
+          requested_by?: string
+          idempotency_key?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_reservations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      inventory_reservation_items: {
+        Row: {
+          id: string
+          reservation_id: string
+          company_id: string
+          sku_id: string | null
+          sku_code: string
+          quantity: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          reservation_id: string
+          company_id: string
+          sku_id?: string | null
+          sku_code: string
+          quantity: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          reservation_id?: string
+          company_id?: string
+          sku_id?: string | null
+          sku_code?: string
+          quantity?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_reservation_items_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_reservations"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       sku_transactions: {
         Row: {

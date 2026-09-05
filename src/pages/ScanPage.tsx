@@ -7,6 +7,8 @@ import { Package, LogOut, LogIn } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { CtrlPlusLogo } from "@/components/CtrlPlusLogo";
+import { useTenant } from "@/contexts/TenantContext";
 import {
   Select,
   SelectContent,
@@ -62,6 +64,7 @@ type TxFilter = "all" | "check_out" | "check_in";
 export default function ScanPage() {
   const [params] = useSearchParams();
   const skuCode = params.get("sku") ?? "";
+  const { tenant } = useTenant();
 
   const [sku, setSku]               = useState<Sku | null>(null);
   const [loading, setLoading]       = useState(true);
@@ -88,14 +91,24 @@ export default function ScanPage() {
     setTxLoading(true);
 
     try {
+      let skuQuery = supabase.from("skus").select("*").eq("sku_code", skuCode);
+      if (tenant?.id) {
+        skuQuery = skuQuery.eq("company_id", tenant.id);
+      }
+
+      let txQuery = supabase
+        .from("sku_transactions")
+        .select("*")
+        .eq("sku_code", skuCode)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (tenant?.id) {
+        txQuery = txQuery.eq("company_id", tenant.id);
+      }
+
       const [{ data, error: e }, { data: txData }] = await Promise.all([
-        supabase.from("skus").select("*").eq("sku_code", skuCode).maybeSingle(),
-        supabase
-          .from("sku_transactions")
-          .select("*")
-          .eq("sku_code", skuCode)
-          .order("created_at", { ascending: false })
-          .limit(50),
+        skuQuery.maybeSingle(),
+        txQuery,
       ]);
 
       if (e) {
@@ -212,9 +225,12 @@ export default function ScanPage() {
         {/* ── Item card ───────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-md w-full max-w-xs flex flex-col select-none overflow-hidden">
 
-          <div className="flex justify-between items-center px-5 pt-5 pb-3 font-mono text-[11px] tracking-[0.2em] uppercase text-gray-400">
-            <span>SKU</span>
-            <span>STOCK</span>
+          <div className="flex justify-between items-center px-5 pt-5 pb-3 font-mono text-[11px] tracking-[0.1em] uppercase text-gray-400">
+            <span className="flex items-center gap-1.5 font-bold text-gray-700">
+              <CtrlPlusLogo theme="light" variant="icon" className="h-4 w-4" />
+              <span>{tenant?.name || "Ctrl+ Production"}</span>
+            </span>
+            <span>SKU · STOCK</span>
           </div>
 
           <hr className="border-gray-100 mx-5" />

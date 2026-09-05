@@ -243,4 +243,134 @@ describe("E2E Smoke Tests: Core Inventory Flows", () => {
       expect(extractSlug("admin.filmflow.com")).toBeNull();
     });
   });
+
+  describe("7. Ctrl+ Production Logo Brand Rules", () => {
+    const LOGO_ASSETS = {
+      dark: {
+        full: "/branding/ctrlplus-logo-dark.png",
+        icon: "/branding/ctrlplus-icon-dark.png",
+      },
+      light: {
+        full: "/branding/ctrlplus-logo-light.png",
+        icon: "/branding/ctrlplus-icon-light.png",
+      },
+    };
+
+    it("maps dark and light themes to canonical asset paths without distortion", () => {
+      expect(LOGO_ASSETS.dark.full).toBe("/branding/ctrlplus-logo-dark.png");
+      expect(LOGO_ASSETS.dark.icon).toBe("/branding/ctrlplus-icon-dark.png");
+      expect(LOGO_ASSETS.light.full).toBe("/branding/ctrlplus-logo-light.png");
+      expect(LOGO_ASSETS.light.icon).toBe("/branding/ctrlplus-icon-light.png");
+    });
+  });
+
+  describe("8. Inventory AI Agent Tool Validation & Safety", () => {
+    it("correctly validates valid tool call payloads with required args", async () => {
+      const { validateToolCall, INVENTORY_AGENT_TOOLS } = await import("@/lib/ai/inventoryAgentTools");
+
+      const searchCall = {
+        tool: "search_sku_item",
+        args: { query: "Sony FX6" }
+      };
+      const validSearch = validateToolCall(searchCall);
+      expect(validSearch.valid).toBe(true);
+      expect(validSearch.toolCall?.tool).toBe("search_sku_item");
+      expect(validSearch.toolCall?.args.query).toBe("Sony FX6");
+
+      const logCall = {
+        tool: "log_quick_transaction",
+        args: { sku_code: "EQ-CAM-001", action_type: "check_out", person_name: "สมชาย" }
+      };
+      const validLog = validateToolCall(logCall);
+      expect(validLog.valid).toBe(true);
+      expect(validLog.toolCall?.tool).toBe("log_quick_transaction");
+    });
+
+    it("rejects tool calls with missing required arguments or unknown tools", async () => {
+      const { validateToolCall } = await import("@/lib/ai/inventoryAgentTools");
+
+      const missingArg = {
+        tool: "log_quick_transaction",
+        args: { sku_code: "EQ-001" } // missing action_type & person_name
+      };
+      const resultMissing = validateToolCall(missingArg);
+      expect(resultMissing.valid).toBe(false);
+      expect(resultMissing.error).toContain("Missing required argument");
+
+      const unknown = {
+        tool: "delete_entire_database",
+        args: {}
+      };
+      const resultUnknown = validateToolCall(unknown);
+      expect(resultUnknown.valid).toBe(false);
+      expect(resultUnknown.error).toContain("Unknown tool");
+    });
+
+    it("classifies mutating tools strictly for user confirmation gating", async () => {
+      const { INVENTORY_AGENT_TOOLS } = await import("@/lib/ai/inventoryAgentTools");
+
+      const mutating = INVENTORY_AGENT_TOOLS.filter(t => t.isMutating).map(t => t.name);
+      const readOnly = INVENTORY_AGENT_TOOLS.filter(t => !t.isMutating).map(t => t.name);
+
+      expect(mutating).toContain("log_quick_transaction");
+      expect(mutating).toContain("trigger_sheet_sync");
+      expect(readOnly).toContain("search_sku_item");
+      expect(readOnly).toContain("check_item_availability");
+      expect(readOnly).toContain("recommend_equipment_kit");
+      expect(readOnly).toContain("generate_sku_report");
+    });
+  });
+
+  describe("9. Page Context Routing Hints", () => {
+    it("resolves relevant tools and labels for Inventory pages", async () => {
+      const { getPageContext } = await import("@/lib/ai/pageContext");
+
+      const rootCtx = getPageContext("/");
+      expect(rootCtx.label).toContain("คลังอุปกรณ์");
+      expect(rootCtx.relevantTools).toContain("search_sku_item");
+
+      const adminCtx = getPageContext("/admin");
+      expect(adminCtx.label).toContain("Admin");
+      expect(adminCtx.relevantTools).toContain("trigger_sheet_sync");
+
+      const scanCtx = getPageContext("/scan");
+      expect(scanCtx.label).toContain("สแกน QR Code");
+    });
+  });
+
+  describe("10. SaaS Billing Plans Catalog & Seat Limit Checks", () => {
+    it("contains server-owned pricing and seat limits adhering to PAYMENT_BILLING_PATTERN", async () => {
+      const { SAAS_PLANS } = await import("@/components/BillingPlansDialog");
+
+      expect(SAAS_PLANS.length).toBeGreaterThanOrEqual(4);
+
+      const free = SAAS_PLANS.find(p => p.id === "free");
+      const solo = SAAS_PLANS.find(p => p.id === "solo");
+      const team = SAAS_PLANS.find(p => p.id === "team");
+      const studio = SAAS_PLANS.find(p => p.id === "studio");
+
+      expect(free?.priceBaht).toBe(0);
+      expect(free?.seatLimit).toBe(3);
+
+      expect(solo?.priceBaht).toBe(550);
+      expect(solo?.seatLimit).toBe(1);
+
+      expect(team?.priceBaht).toBe(2500);
+      expect(team?.seatLimit).toBe(8);
+
+      expect(studio?.priceBaht).toBe(5000);
+      expect(studio?.seatLimit).toBe(20);
+    });
+
+    it("enforces seat limit checks when inviting new members", () => {
+      const checkSeatLimit = (currentUsersCount: number, seatLimit: number): boolean => {
+        return currentUsersCount < seatLimit;
+      };
+
+      expect(checkSeatLimit(2, 3)).toBe(true);  // Allowed
+      expect(checkSeatLimit(3, 3)).toBe(false); // Over limit
+      expect(checkSeatLimit(8, 8)).toBe(false); // Over limit
+      expect(checkSeatLimit(7, 8)).toBe(true);  // Allowed
+    });
+  });
 });

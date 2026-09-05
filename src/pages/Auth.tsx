@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useLang } from "@/hooks/useLang";
+import { useTenant } from "@/contexts/TenantContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,13 +10,14 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Package } from "lucide-react";
+import { CtrlPlusLogo } from "@/components/CtrlPlusLogo";
 
 type View = "signin" | "forgot";
 
 const Auth = () => {
   const nav = useNavigate();
   const { lang, setLang, t } = useLang();
+  const { tenant } = useTenant();
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<View>("signin");
 
@@ -54,7 +56,12 @@ const Auth = () => {
       password: suPass,
       options: {
         emailRedirectTo: `${window.location.origin}/`,
-        data: { display_name: suName, department: suDept },
+        data: {
+          display_name: suName,
+          department: suDept,
+          company_id: tenant?.id || null,
+          tenant_slug: tenant?.slug || null,
+        },
       },
     });
     setLoading(false);
@@ -94,10 +101,10 @@ const Auth = () => {
       <div className="absolute inset-0 -z-10 opacity-20" style={{ backgroundImage: "var(--gradient-hero)" }} />
       <Card className="w-full max-w-md p-8 shadow-elegant">
         <div className="flex flex-col items-center mb-6">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-3" style={{ background: "var(--gradient-hero)" }}>
-            <Package className="w-7 h-7 text-primary-foreground" />
-          </div>
-          <h1 className="text-2xl font-bold">FilmFlow-Inventory</h1>
+          <CtrlPlusLogo theme="auto" variant="full" className="h-11 w-auto mb-3" />
+          <h1 className="text-xl font-bold">
+            {tenant ? `${tenant.name} · Inventory` : "Ctrl+ Production Inventory"}
+          </h1>
           <p className="text-sm text-muted-foreground font-th">{t.appSubtitle}</p>
           <button
             onClick={() => setLang(lang === "th" ? "en" : "th")}

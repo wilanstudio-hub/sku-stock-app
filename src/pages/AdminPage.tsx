@@ -8,9 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, ShieldCheck, X, Clapperboard, Shirt, Camera, RefreshCw, Link as LinkIcon, Building2, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
+import { ArrowLeft, ShieldCheck, X, Clapperboard, Shirt, Camera, RefreshCw, Link as LinkIcon, Building2, CheckCircle2, AlertCircle, ExternalLink, CreditCard, Sparkles, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { CtrlPlusLogo } from "@/components/CtrlPlusLogo";
+import { BillingPlansDialog } from "@/components/BillingPlansDialog";
+import { useTenant } from "@/contexts/TenantContext";
 import type { Company } from "@/contexts/TenantContext";
 
 type AppRole = "admin" | "art" | "wd" | "equipment" | "viewer";
@@ -23,8 +27,8 @@ const DEPTS: { key: Dept; label: string; icon: React.ReactNode }[] = [
   { key: "equipment", label: "Equipment", icon: <Camera className="w-3.5 h-3.5" /> },
 ];
 
-type Profile = { user_id: string; display_name: string | null; email?: string };
-type RoleRow = { id: string; user_id: string; role: AppRole };
+type Profile = { user_id: string; display_name: string | null; company_id?: string | null; email?: string };
+type RoleRow = { id: string; user_id: string; role: AppRole; company_id?: string | null };
 type AccessRow = { id: string; user_id: string; department: Dept };
 
 const ROLE_COLOR: Record<AppRole, string> = {
@@ -36,7 +40,8 @@ const ROLE_COLOR: Record<AppRole, string> = {
 };
 
 export default function AdminPage() {
-  const { roles, loading: authLoading } = useAuth();
+  const { roles, companyId, loading: authLoading } = useAuth();
+  const { tenant, refreshTenant } = useTenant();
   const { t } = useLang();
   const nav = useNavigate();
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -44,6 +49,7 @@ export default function AdminPage() {
   const [sectionAccess, setSectionAccess] = useState<AccessRow[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [billingOpen, setBillingOpen] = useState(false);
   
   // Google Sheets Sync state
   const [sheetUrl, setSheetUrl] = useState("");
@@ -56,8 +62,8 @@ export default function AdminPage() {
   const load = async () => {
     setLoading(true);
     const [{ data: p }, { data: r }, { data: a }, { data: c }] = await Promise.all([
-      supabase.from("profiles").select("user_id, display_name"),
-      supabase.from("user_roles").select("id, user_id, role"),
+      supabase.from("profiles").select("user_id, display_name, company_id"),
+      supabase.from("user_roles").select("id, user_id, role, company_id"),
       supabase.from("viewer_section_access").select("id, user_id, department"),
       supabase.from("companies").select("*").order("created_at", { ascending: false }),
     ]);
@@ -70,6 +76,13 @@ export default function AdminPage() {
 
   useEffect(() => { if (roles.includes("admin")) load(); }, [roles]);
 
+  const billingCompany = tenant ?? companies.find((company) => company.id === companyId) ?? null;
+  const billingCompanySeatCount = new Set(
+    userRoles
+      .filter((role) => !billingCompany || role.company_id === billingCompany.id)
+      .map((role) => role.user_id),
+  ).size;
+
   const rolesOf = (uid: string) => userRoles.filter((r) => r.user_id === uid);
   const accessOf = (uid: string) => sectionAccess.filter((a) => a.user_id === uid);
   const isViewer = (uid: string) => {
@@ -78,7 +91,16 @@ export default function AdminPage() {
   };
 
   const addRole = async (uid: string, role: AppRole) => {
-    const { error } = await supabase.from("user_roles").insert({ user_id: uid, role });
+    // Check seat limit when user currently has no roles in this studio
+    const userRoleList = rolesOf(uid).filter((roleRow) => !billingCompany || roleRow.company_id === billingCompany.id);
+    const seatLimit = billingCompany?.seat_limit || 3;
+    if (userRoleList.length === 0 && billingCompanySeatCount >= seatLimit) {
+      toast.error(`สตูดิโอของคุณใช้โควต้าที่นั่งครบตามแผนแล้ว (${seatLimit} ที่นั่ง) กรุณาอัปเกรดแผนเพื่อเพิ่มสมาชิก`);
+      setBillingOpen(true);
+      return;
+    }
+
+    const { error } = await supabase.from("user_roles").insert({ user_id: uid, role, company_id: billingCompany?.id || null });
     if (error) toast.error(error.message);
     else { toast.success(t.roleAdded(role)); load(); }
   };
@@ -187,18 +209,70 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card/50 backdrop-blur sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => nav("/")} title={t.back}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-primary" />
-            <h1 className="font-bold">{t.adminTitle}</h1>
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => nav("/")} title={t.back}>
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <div className="flex items-center gap-2">
+              <CtrlPlusLogo theme="auto" variant="icon" className="h-6 w-6" />
+              <ShieldCheck className="w-5 h-5 text-primary" />
+              <h1 className="font-bold">{t.adminTitle}</h1>
+            </div>
           </div>
+          <CtrlPlusLogo theme="auto" variant="full" className="h-6 w-auto hidden sm:block opacity-75" />
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-6 max-w-4xl space-y-6">
+        {/* Subscription Plan & Seat Limits Card */}
+        <Card className="border-primary/20 bg-linear-to-r from-primary/5 via-background to-orange-500/5">
+          <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1.5 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  แผนการใช้งานสตูดิโอ ({billingCompany?.name || "สตูดิโอของคุณ"})
+                </span>
+                <Badge variant="default" className="text-[10px] uppercase font-bold bg-primary text-primary-foreground">
+                  {billingCompany?.billing_plan ? billingCompany.billing_plan.toUpperCase() : "FREE"} PLAN
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] uppercase font-mono ${
+                    billingCompany?.billing_status === "active"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-amber-50 text-amber-700 border-amber-200"
+                  }`}
+                >
+                  {billingCompany?.billing_status || "active"}
+                </Badge>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
+                <span className="flex items-center gap-1 font-medium text-foreground">
+                  <Users className="w-3.5 h-3.5 text-primary" />
+                  ที่นั่งที่ใช้: {billingCompanySeatCount} / {billingCompany?.seat_limit || 3} ที่นั่ง
+                </span>
+                <span>•</span>
+                <span>
+                  หมดอายุ: {billingCompany?.billing_expires_at ? new Date(billingCompany.billing_expires_at).toLocaleDateString("th-TH") : "ไม่ระบุ (Free Cycle)"}
+                </span>
+              </div>
+
+              <div className="w-full max-w-md pt-1.5">
+                <Progress value={Math.min(100, (billingCompanySeatCount / (billingCompany?.seat_limit || 3)) * 100)} className="h-2" />
+              </div>
+            </div>
+
+            <Button
+              onClick={() => setBillingOpen(true)}
+              className="gap-2 shrink-0 bg-gradient-to-r from-primary to-orange-500 hover:opacity-90 text-white font-semibold text-xs h-9 px-4 rounded-lg shadow-sm"
+            >
+              <Sparkles className="w-4 h-4" /> จัดการแผน / ขยายที่นั่ง
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Multi-Tenant SaaS Studios Management */}
         <Card className="border-border">
           <CardHeader className="pb-3">
@@ -238,6 +312,9 @@ export default function AdminPage() {
                       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                         <span className="font-mono bg-muted px-1.5 py-0.5 rounded">
                           slug: {c.slug}
+                        </span>
+                        <span className="font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded uppercase text-[10px] font-semibold">
+                          plan: {c.billing_plan || "free"} ({c.seat_limit || 3} seats)
                         </span>
                         {c.contact_email && <span>อีเมล: {c.contact_email}</span>}
                         {c.contact_name && <span>ผู้ติดต่อ: {c.contact_name}</span>}
@@ -459,6 +536,16 @@ export default function AdminPage() {
           </CardContent>
         </Card>
       </main>
+
+      <BillingPlansDialog
+        open={billingOpen}
+        onOpenChange={setBillingOpen}
+        company={billingCompany}
+        onPlanUpdated={() => {
+          load();
+          refreshTenant();
+        }}
+      />
     </div>
   );
 }

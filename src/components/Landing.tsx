@@ -1,15 +1,19 @@
 import { useNavigate } from "react-router-dom";
-import { Package, ArrowRight, CheckCircle2, Clapperboard, Camera, Shirt, FileSpreadsheet, ShieldCheck, Building2 } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clapperboard, Camera, Shirt, FileSpreadsheet, ShieldCheck, Building2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { useLang } from "@/hooks/useLang";
 import { RegisterCompanyDialog } from "./RegisterCompanyDialog";
+import { CtrlPlusLogo } from "./CtrlPlusLogo";
 
 export const Landing = () => {
   const nav = useNavigate();
   const { t } = useLang();
 
   return (
-    <div className="flex flex-col items-center pt-20 pb-32 px-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
+    <div className="flex flex-col items-center pt-16 pb-32 px-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
+      {/* Brand Logo */}
+      <CtrlPlusLogo theme="auto" variant="full" className="h-12 w-auto mb-6" />
+
       {/* Badge */}
       <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-8">
         <span className="relative flex h-2 w-2">

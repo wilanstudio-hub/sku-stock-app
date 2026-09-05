@@ -9,13 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SkuTable } from "@/components/SkuTable";
 import { TransactionHistoryDialog } from "@/components/TransactionHistoryDialog";
+import { ProjectReservationsDialog } from "@/components/ProjectReservationsDialog";
 import { ManageDepartmentsDialog } from "@/components/ManageDepartmentsDialog";
 import { ManageSheetsDialog } from "@/components/ManageSheetsDialog";
 import { Landing } from "@/components/Landing";
 import { cn } from "@/lib/utils";
+import { CtrlPlusLogo } from "@/components/CtrlPlusLogo";
 import {
   LogIn, LogOut, Package, Clapperboard, Shirt, Camera,
-  ShieldCheck, ClipboardList, Plus, Edit2
+  ShieldCheck, ClipboardList, Plus, Edit2, Sparkles, Film
 } from "lucide-react";
 import type { Department } from "@/hooks/useAuth";
 
@@ -41,6 +43,8 @@ const Index = () => {
   const isAdmin = roles.includes("admin");
 
   const [txHistoryOpen, setTxHistoryOpen] = useState(false);
+  const [reservationsOpen, setReservationsOpen] = useState(false);
+  const [activeReservationsCount, setActiveReservationsCount] = useState(0);
   
   // Dynamic Departments State
   const [departments, setDepartments] = useState<any[]>([]);
@@ -50,6 +54,28 @@ const Index = () => {
   const [registeredSheets, setRegisteredSheets] = useState<RegisteredSheet[]>([]);
 
   // ── Data loaders ──────────────────────────────────────────────────────────
+
+  const loadActiveReservationsCount = async () => {
+    if (!tenant?.id) return;
+    try {
+      const { count, error } = await supabase
+        .from("inventory_reservations")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", tenant.id)
+        .eq("status", "reserved");
+      if (!error && typeof count === "number") {
+        setActiveReservationsCount(count);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (user && tenant?.id) {
+      loadActiveReservationsCount();
+    }
+  }, [user, tenant?.id]);
 
   const loadDepartments = async () => {
     const { data } = await supabase.from("departments").select("*").order("order_index");
@@ -144,15 +170,10 @@ const Index = () => {
         {/* App bar: logo + user controls */}
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 shrink-0">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: "var(--gradient-hero)" }}
-            >
-              <Package className="w-5 h-5 text-primary-foreground" />
-            </div>
+            <CtrlPlusLogo theme="auto" variant="icon" className="h-9 w-9 shrink-0" />
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-bold leading-tight">{tenant?.name || "FilmFlow-Inventory"}</h1>
+                <h1 className="font-bold leading-tight">{tenant?.name || "Ctrl+ Production Inventory"}</h1>
                 {tenant && (
                   <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-primary/5 text-primary border-primary/20">
                     {tenant.slug}
@@ -215,6 +236,16 @@ const Index = () => {
                 <span className="text-sm text-muted-foreground hidden md:inline">
                   {user.email}
                 </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => nav("/ai-agent")}
+                  title="Ctrl+ AI Studio Agent"
+                  className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                >
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <span className="hidden sm:inline font-th text-xs font-semibold">AI Agent</span>
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"

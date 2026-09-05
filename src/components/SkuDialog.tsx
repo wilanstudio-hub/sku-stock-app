@@ -70,6 +70,7 @@ const COLORS: { name: string; hex: string }[] = [
 
 export type Sku = {
   id?: string;
+  company_id?: string | null;
   department: "art" | "wd" | "equipment";
   sku_code: string;
   name_th: string;
@@ -95,6 +96,7 @@ export type Sku = {
 
 export type SkuTransaction = {
   id: string;
+  company_id?: string | null;
   sku_code: string;
   department: string;
   action_type: 'check_out' | 'check_in';
