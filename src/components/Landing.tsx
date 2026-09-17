@@ -3,7 +3,7 @@ import { ArrowRight, CheckCircle2, Clapperboard, Camera, Shirt, FileSpreadsheet,
 import { Button } from "./ui/button";
 import { useLang } from "@/hooks/useLang";
 import { RegisterCompanyDialog } from "./RegisterCompanyDialog";
-import { CtrlPlusLogo } from "./CtrlPlusLogo";
+import { AppLogo } from "./AppLogo";
 
 export const Landing = () => {
   const nav = useNavigate();
@@ -12,7 +12,7 @@ export const Landing = () => {
   return (
     <div className="flex flex-col items-center pt-16 pb-32 px-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
       {/* Brand Logo */}
-      <CtrlPlusLogo theme="auto" variant="full" className="h-12 w-auto mb-6" />
+      <AppLogo theme="auto" variant="full" className="h-12 w-auto mb-6" />
 
       {/* Badge */}
       <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-8">

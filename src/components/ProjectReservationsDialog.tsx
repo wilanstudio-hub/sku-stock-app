@@ -341,7 +341,7 @@ export function ProjectReservationsDialog({
                   )}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  รายการจองอุปกรณ์จาก FilmFlow Open & Pipeline เชื่อมต่อกับคลัง {tenant?.name || "Ctrl+ Production"}
+                  รายการจองอุปกรณ์จาก FilmFlow Open & Pipeline เชื่อมต่อกับคลัง {tenant?.name || "SKU Stock"}
                 </DialogDescription>
               </div>
             </div>

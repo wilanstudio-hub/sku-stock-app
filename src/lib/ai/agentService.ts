@@ -92,7 +92,7 @@ export function buildSystemPrompt(context: AgentContextProps): string {
     (t) => `- ${t.name}: ${t.description} (Args: ${JSON.stringify(t.parameters)})`
   ).join("\n");
 
-  return `You are Ctrl+ Production Agent, the intelligent AI copilot specialized in Film & Video Production Inventory, Equipment Tracking, and SKU Stock Management.
+  return `You are SKU Stock Agent, the intelligent AI copilot specialized in Film & Video Production Inventory, Equipment Tracking, and SKU Stock Management.
 You communicate primarily in clear, polite, and helpful Thai (or match the user's language).
 
 [STUDIO WORKSPACE CONTEXT]

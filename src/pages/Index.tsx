@@ -15,7 +15,7 @@ import { ManageSheetsDialog } from "@/components/ManageSheetsDialog";
 import { ZonesDialog } from "@/components/ZonesDialog";
 import { Landing } from "@/components/Landing";
 import { cn } from "@/lib/utils";
-import { CtrlPlusLogo } from "@/components/CtrlPlusLogo";
+import { AppLogo } from "@/components/AppLogo";
 import {
   LogIn, LogOut, Package, Clapperboard, Shirt, Camera,
   ShieldCheck, ClipboardList, Plus, Edit2, Sparkles, Film, MapPin
@@ -172,10 +172,10 @@ const Index = () => {
         {/* App bar: logo + user controls */}
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 shrink-0">
-            <CtrlPlusLogo theme="auto" variant="icon" className="h-9 w-9 shrink-0" />
+            <AppLogo theme="auto" variant="icon" className="h-9 w-9 shrink-0" />
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-bold leading-tight">{tenant?.name || "Ctrl+ Production Inventory"}</h1>
+                <h1 className="font-bold leading-tight">{tenant?.name || "SKU Stock"}</h1>
                 {tenant && (
                   <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-primary/5 text-primary border-primary/20">
                     {tenant.slug}
@@ -242,7 +242,7 @@ const Index = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => nav("/ai-agent")}
-                  title="Ctrl+ AI Studio Agent"
+                  title="SKU Stock AI Studio Agent"
                   className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
                 >
                   <Sparkles className="w-4 h-4 text-primary" />
