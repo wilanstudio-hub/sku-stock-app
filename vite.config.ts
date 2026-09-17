@@ -34,7 +34,15 @@ export default defineConfig(({ mode }) => ({
   build: {
     // Disable modulepreload polyfill — avoids inline JS that runs before our
     // code and may trigger iOS 26 beta WebKit crash during module bootstrapping.
-    modulePreload: { polyfill: false },
+    // Also strip the "pdf" chunk (jsPDF + html2canvas, ~650 kB) from preload
+    // hints: it's dynamically imported only when a user clicks Export PDF,
+    // but Vite still emits a <link rel="modulepreload"> for it on every page
+    // load by default, which fetches+compiles it upfront anyway — defeating
+    // the whole point of lazy-loading it for iOS WebKit's OOM-crash budget.
+    modulePreload: {
+      polyfill: false,
+      resolveDependencies: (_filename, deps) => deps.filter((dep) => !dep.includes("/pdf-")),
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {

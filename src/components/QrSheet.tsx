@@ -1,13 +1,9 @@
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import type { Sku } from "./SkuDialog";
 
 export interface QrSheetHandle {
   printItems(items: Sku[]): void;
-}
-
-interface Props {
-  items: Sku[];
 }
 
 const DEPT_LABEL: Record<string, string> = { art: "Art", wd: "WD", equipment: "Equipment" };
@@ -80,9 +76,15 @@ export function buildPrintWindow(items: Sku[], qrRefs: Map<string, HTMLCanvasEle
   w.document.close();
 }
 
-// Pure canvas container — renders hidden QR canvases so SkuTable can call
-// printItems() with any subset without needing its own canvas elements.
-export const QrSheet = forwardRef<QrSheetHandle, Props>(({ items }, ref) => {
+// Pure canvas container — renders hidden QR canvases on demand, only for the
+// items actually being printed right now (set via printItems()). Rendering
+// one 264x264 canvas per item in the full filtered SKU list on every table
+// render (rather than just the print selection) was a real iOS WebKit crash
+// cause — display:none/.hidden does not skip canvas draw work, so a filtered
+// view with hundreds/thousands of rows meant that many hidden canvas paints
+// on mount regardless of pagination or what was actually being printed.
+export const QrSheet = forwardRef<QrSheetHandle, object>((_props, ref) => {
+  const [printQueue, setPrintQueue] = useState<Sku[] | null>(null);
   const qrRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
 
   const setRef = (id: string) => (el: HTMLCanvasElement | null) => {
@@ -92,13 +94,24 @@ export const QrSheet = forwardRef<QrSheetHandle, Props>(({ items }, ref) => {
 
   useImperativeHandle(ref, () => ({
     printItems(itemsToPrint: Sku[]) {
-      buildPrintWindow(itemsToPrint, qrRefs.current);
+      qrRefs.current.clear();
+      setPrintQueue(itemsToPrint);
     },
   }));
 
+  // Runs after the canvases above have committed+drawn (child QRCodeCanvas
+  // effects flush before this parent effect), so the refs are ready to read.
+  useEffect(() => {
+    if (!printQueue) return;
+    buildPrintWindow(printQueue, qrRefs.current);
+    setPrintQueue(null);
+  }, [printQueue]);
+
+  if (!printQueue) return null;
+
   return (
     <div className="hidden" aria-hidden="true">
-      {items.map((s) => (
+      {printQueue.map((s) => (
         <QRCodeCanvas
           key={s.id}
           ref={setRef(s.id!)}

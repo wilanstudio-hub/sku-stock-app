@@ -450,7 +450,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
             </SelectContent>
           </Select>
         )}
-        <QrSheet ref={qrSheetRef} items={filtered} />
+        <QrSheet ref={qrSheetRef} />
         <Button variant="outline" onClick={() => handlePrintLabels()} disabled={filtered.length === 0} className="gap-1">
           <Printer className="w-4 h-4" />
           <span className="hidden sm:inline">{t.printLabelsBtn}</span>
