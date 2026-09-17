@@ -12,12 +12,13 @@ import { TransactionHistoryDialog } from "@/components/TransactionHistoryDialog"
 import { ProjectReservationsDialog } from "@/components/ProjectReservationsDialog";
 import { ManageDepartmentsDialog } from "@/components/ManageDepartmentsDialog";
 import { ManageSheetsDialog } from "@/components/ManageSheetsDialog";
+import { ZonesDialog } from "@/components/ZonesDialog";
 import { Landing } from "@/components/Landing";
 import { cn } from "@/lib/utils";
 import { CtrlPlusLogo } from "@/components/CtrlPlusLogo";
 import {
   LogIn, LogOut, Package, Clapperboard, Shirt, Camera,
-  ShieldCheck, ClipboardList, Plus, Edit2, Sparkles, Film
+  ShieldCheck, ClipboardList, Plus, Edit2, Sparkles, Film, MapPin
 } from "lucide-react";
 import type { Department } from "@/hooks/useAuth";
 
@@ -51,6 +52,7 @@ const Index = () => {
   const [activeDept, setActiveDept] = useState<string>("");
   const [manageDeptsOpen, setManageDeptsOpen] = useState(false);
   const [manageSheetsOpen, setManageSheetsOpen] = useState(false);
+  const [zonesOpen, setZonesOpen] = useState(false);
   const [registeredSheets, setRegisteredSheets] = useState<RegisteredSheet[]>([]);
 
   // ── Data loaders ──────────────────────────────────────────────────────────
@@ -256,6 +258,16 @@ const Index = () => {
                   <ClipboardList className="w-4 h-4" />
                   <span className="hidden sm:inline font-th text-xs">History / Log</span>
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setZonesOpen(true)}
+                  title="รูปพื้นที่เก็บของ (Storage Zones)"
+                  className="gap-1.5"
+                >
+                  <MapPin className="w-4 h-4" />
+                  <span className="hidden sm:inline font-th text-xs">Zones</span>
+                </Button>
                 {isAdmin && (
                   <Button
                     variant="ghost"
@@ -342,6 +354,8 @@ const Index = () => {
       </main>
 
       <TransactionHistoryDialog open={txHistoryOpen} onOpenChange={setTxHistoryOpen} />
+
+      <ZonesDialog open={zonesOpen} onOpenChange={setZonesOpen} />
 
       {isAdmin && (
         <>
