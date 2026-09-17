@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { CtrlPlusLogo } from "@/components/CtrlPlusLogo";
+import { AppLogo } from "@/components/AppLogo";
 
 type View = "signin" | "forgot";
 
@@ -101,9 +101,9 @@ const Auth = () => {
       <div className="absolute inset-0 -z-10 opacity-20" style={{ backgroundImage: "var(--gradient-hero)" }} />
       <Card className="w-full max-w-md p-8 shadow-elegant">
         <div className="flex flex-col items-center mb-6">
-          <CtrlPlusLogo theme="auto" variant="full" className="h-11 w-auto mb-3" />
+          <AppLogo theme="auto" variant="full" className="h-11 w-auto mb-3" />
           <h1 className="text-xl font-bold">
-            {tenant ? `${tenant.name} · Inventory` : "Ctrl+ Production Inventory"}
+            {tenant ? `${tenant.name} · Inventory` : "SKU Stock"}
           </h1>
           <p className="text-sm text-muted-foreground font-th">{t.appSubtitle}</p>
           <button

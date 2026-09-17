@@ -12,7 +12,7 @@ import { ArrowLeft, ShieldCheck, X, Clapperboard, Shirt, Camera, RefreshCw, Link
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { CtrlPlusLogo } from "@/components/CtrlPlusLogo";
+import { AppLogo } from "@/components/AppLogo";
 import { BillingPlansDialog } from "@/components/BillingPlansDialog";
 import { useTenant } from "@/contexts/TenantContext";
 import type { Company } from "@/contexts/TenantContext";
@@ -215,12 +215,12 @@ export default function AdminPage() {
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div className="flex items-center gap-2">
-              <CtrlPlusLogo theme="auto" variant="icon" className="h-6 w-6" />
+              <AppLogo theme="auto" variant="icon" className="h-6 w-6" />
               <ShieldCheck className="w-5 h-5 text-primary" />
               <h1 className="font-bold">{t.adminTitle}</h1>
             </div>
           </div>
-          <CtrlPlusLogo theme="auto" variant="full" className="h-6 w-auto hidden sm:block opacity-75" />
+          <AppLogo theme="auto" variant="full" className="h-6 w-auto hidden sm:block opacity-75" />
         </div>
       </header>
 

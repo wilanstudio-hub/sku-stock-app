@@ -7,7 +7,7 @@ import { Package, LogOut, LogIn } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { CtrlPlusLogo } from "@/components/CtrlPlusLogo";
+import { AppLogo } from "@/components/AppLogo";
 import { useTenant } from "@/contexts/TenantContext";
 import {
   Select,
@@ -227,8 +227,8 @@ export default function ScanPage() {
 
           <div className="flex justify-between items-center px-5 pt-5 pb-3 font-mono text-[11px] tracking-[0.1em] uppercase text-gray-400">
             <span className="flex items-center gap-1.5 font-bold text-gray-700">
-              <CtrlPlusLogo theme="light" variant="icon" className="h-4 w-4" />
-              <span>{tenant?.name || "Ctrl+ Production"}</span>
+              <AppLogo theme="light" variant="icon" className="h-4 w-4" />
+              <span>{tenant?.name || "SKU Stock"}</span>
             </span>
             <span>SKU · STOCK</span>
           </div>

@@ -1,5 +1,5 @@
 /**
- * Source parser and extractor for Ctrl+ Production AI Knowledge Base (NotebookLM Mode)
+ * Source parser and extractor for SKU Stock AI Knowledge Base (NotebookLM Mode)
  * Supports .txt, .md, .fountain, .pdf, .csv, .json, .srt, .tsv, etc.
  */
 

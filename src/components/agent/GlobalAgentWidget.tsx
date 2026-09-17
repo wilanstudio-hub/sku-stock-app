@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { CtrlPlusLogo } from "@/components/CtrlPlusLogo";
+import { AppLogo } from "@/components/AppLogo";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { getPageContext } from "@/lib/ai/pageContext";
@@ -70,7 +70,7 @@ export const GlobalAgentWidget: React.FC = () => {
     {
       id: "welcome",
       role: "assistant",
-      content: `👋 สวัสดีครับ! ผมคือ **Ctrl+ Production Agent** ผู้ช่วยจัดการสต๊อกและอุปกรณ์กองถ่ายสำหรับ **${tenant?.name || "สตูดิโอ"}**\n\nพิมพ์ถามสต๊อก, ตรวจสอบของว่าง, ทำเรื่องเบิก-คืน หรือให้แนะนำ Kit อุปกรณ์กองถ่ายได้เลยครับ!`,
+      content: `👋 สวัสดีครับ! ผมคือ **SKU Stock Agent** ผู้ช่วยจัดการสต๊อกและอุปกรณ์กองถ่ายสำหรับ **${tenant?.name || "สตูดิโอ"}**\n\nพิมพ์ถามสต๊อก, ตรวจสอบของว่าง, ทำเรื่องเบิก-คืน หรือให้แนะนำ Kit อุปกรณ์กองถ่ายได้เลยครับ!`,
       timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
     },
   ]);
@@ -222,7 +222,7 @@ export const GlobalAgentWidget: React.FC = () => {
       {
         id: "welcome",
         role: "assistant",
-        content: `👋 เริ่มต้นการสนทนาใหม่กับ **Ctrl+ Production Agent** สำหรับ **${tenant?.name || "สตูดิโอ"}**`,
+        content: `👋 เริ่มต้นการสนทนาใหม่กับ **SKU Stock Agent** สำหรับ **${tenant?.name || "สตูดิโอ"}**`,
         timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
       },
     ]);
@@ -278,13 +278,13 @@ export const GlobalAgentWidget: React.FC = () => {
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-5 right-5 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-primary text-primary-foreground shadow-2xl hover:scale-105 transition-all duration-200 border border-primary-foreground/20 group"
-          title="เปิด Ctrl+ Production Agent"
+          title="เปิด SKU Stock Agent"
         >
           <div className="relative flex items-center justify-center">
-            <CtrlPlusLogo theme="dark" variant="icon" className="w-5 h-5" />
+            <AppLogo theme="dark" variant="icon" className="w-5 h-5" />
             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-primary animate-pulse" />
           </div>
-          <span className="text-xs font-semibold tracking-wide">Ctrl+ Agent</span>
+          <span className="text-xs font-semibold tracking-wide">SKU Stock Agent</span>
         </button>
       )}
 
@@ -294,10 +294,10 @@ export const GlobalAgentWidget: React.FC = () => {
           {/* Header */}
           <div className="px-4 py-3 border-b bg-muted/40 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2.5">
-              <CtrlPlusLogo theme="auto" variant="icon" className="w-6 h-6 shrink-0" />
+              <AppLogo theme="auto" variant="icon" className="w-6 h-6 shrink-0" />
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-sm">Ctrl+ Agent</span>
+                  <span className="font-bold text-sm">SKU Stock Agent</span>
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/20">
                     Inventory
                   </Badge>
@@ -404,7 +404,7 @@ export const GlobalAgentWidget: React.FC = () => {
             {loading && (
               <div className="flex items-center gap-2 text-muted-foreground text-xs p-2">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span>Ctrl+ Agent กำลังคิดและประมวลผล...</span>
+                <span>SKU Stock Agent กำลังคิดและประมวลผล...</span>
               </div>
             )}
 
@@ -464,7 +464,7 @@ export const GlobalAgentWidget: React.FC = () => {
               การตั้งค่า AI Provider
             </DialogTitle>
             <DialogDescription>
-              เลือกระบบโมเดล AI ที่ต้องการใช้งานสำหรับ Ctrl+ Production Agent
+              เลือกระบบโมเดล AI ที่ต้องการใช้งานสำหรับ SKU Stock Agent
             </DialogDescription>
           </DialogHeader>
 
