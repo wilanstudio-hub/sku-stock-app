@@ -503,6 +503,36 @@ export type Database = {
         }
         Relationships: []
       }
+      zones: {
+        Row: {
+          created_at: string | null
+          id: string
+          image_url: string | null
+          key: string
+          name_en: string | null
+          name_th: string
+          order_index: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          key: string
+          name_en?: string | null
+          name_th: string
+          order_index?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          key?: string
+          name_en?: string | null
+          name_th?: string
+          order_index?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
