@@ -24,7 +24,7 @@ interface Props {
 }
 
 export const ZonesDialog = ({ open, onOpenChange }: Props) => {
-  const { roles, companyId } = useAuth();
+  const { roles } = useAuth();
   const isAdmin = roles.includes("admin");
 
   const [zones, setZones] = useState<Zone[]>([]);
@@ -56,12 +56,7 @@ export const ZonesDialog = ({ open, onOpenChange }: Props) => {
       toast.error("กรุณากรอกรหัสโซนและชื่อโซนให้ครบถ้วน");
       return;
     }
-    if (!companyId) {
-      toast.error("ไม่พบข้อมูลบริษัทของผู้ใช้");
-      return;
-    }
     const { error } = await supabase.from("zones").insert({
-      company_id: companyId,
       key: newKey.trim(),
       name_th: newNameTh.trim(),
       order_index: zones.length + 1,

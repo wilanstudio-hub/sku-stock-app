@@ -505,7 +505,6 @@ export type Database = {
       }
       zones: {
         Row: {
-          company_id: string | null
           created_at: string | null
           id: string
           image_url: string | null
@@ -515,7 +514,6 @@ export type Database = {
           order_index: number | null
         }
         Insert: {
-          company_id?: string | null
           created_at?: string | null
           id?: string
           image_url?: string | null
@@ -525,7 +523,6 @@ export type Database = {
           order_index?: number | null
         }
         Update: {
-          company_id?: string | null
           created_at?: string | null
           id?: string
           image_url?: string | null

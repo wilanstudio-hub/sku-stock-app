@@ -1,35 +1,31 @@
 CREATE TABLE IF NOT EXISTS public.zones (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
-  key TEXT NOT NULL,
+  key TEXT UNIQUE NOT NULL,
   name_th TEXT NOT NULL,
   name_en TEXT,
   image_url TEXT,
   order_index INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (company_id, key)
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 ALTER TABLE public.zones ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
-  CREATE POLICY "Users view zones" ON public.zones FOR SELECT TO authenticated
-    USING (company_id = public.get_user_company_id(auth.uid()));
+  CREATE POLICY "zones_select_authenticated" ON public.zones FOR SELECT TO authenticated USING (true);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-  CREATE POLICY "Admins manage zones" ON public.zones FOR ALL TO authenticated
-    USING (public.has_company_role(auth.uid(), 'admin', company_id))
-    WITH CHECK (public.has_company_role(auth.uid(), 'admin', company_id));
+  CREATE POLICY "zones_write_admin" ON public.zones FOR ALL TO authenticated USING (
+    public.has_role(auth.uid(), 'admin')
+  ) WITH CHECK (
+    public.has_role(auth.uid(), 'admin')
+  );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
--- Seed the 13 basement zones already in use (see src/constants/zones.ts) for the default tenant.
-INSERT INTO public.zones (company_id, key, name_th, name_en, order_index)
-SELECT c.id, z.key, z.name_th, z.name_en, z.order_index
-FROM (SELECT id FROM public.companies WHERE slug = 'wilan' LIMIT 1) c
-CROSS JOIN (VALUES
+-- Seed the 13 existing basement zones already referenced in src/constants/zones.ts.
+INSERT INTO public.zones (key, name_th, name_en, order_index) VALUES
   ('A', 'ZONE BOX', 'ZONE BOX', 1),
   ('B', 'SH1-SHELVING UNIT1 (ชั้นวางที่ 1)', 'SH1-SHELVING UNIT1', 2),
   ('C', 'รถเข็นพยาบาล', 'Medical Cart', 3),
@@ -43,6 +39,4 @@ CROSS JOIN (VALUES
   ('K', 'ZONE BOX ART 4', 'ZONE BOX ART 4', 11),
   ('L', 'FOAM ZONE', 'FOAM ZONE', 12),
   ('M', 'ZONE BOX ART 5', 'ZONE BOX ART 5', 13)
-) AS z(key, name_th, name_en, order_index)
-WHERE c.id IS NOT NULL
-ON CONFLICT (company_id, key) DO NOTHING;
+ON CONFLICT (key) DO NOTHING;
