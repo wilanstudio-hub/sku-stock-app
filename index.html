@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="th">
+<html lang="th" translate="no">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,7 +7,13 @@
     <meta name="description" content="A bilingual inventory, SKU tracking, and Google Sheets sync system for film and commercial productions.">
     <meta name="author" content="FilmFlow" />
     <!-- Prevent Chrome/Safari auto-translate: the app is bilingual (TH/EN) and
-         a translation proxy changes the origin, breaking Supabase auth. -->
+         a translation proxy changes the origin, breaking Supabase auth and
+         producing "Can't open this page" on iOS. The meta tag below only
+         stops Chrome's translate bar — Safari's on-device translate ignores
+         it and needs the translate="no" attribute on <html> above instead.
+         (This exact fix was found and deployed once already in an earlier
+         session but was never committed, so it silently regressed — keep
+         both together and committed.) -->
     <meta name="google" content="notranslate" />
     <meta http-equiv="Content-Language" content="th,en" />
 
