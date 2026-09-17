@@ -12,7 +12,18 @@ function esc(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function buildPrintWindow(items: Sku[], qrRefs: Map<string, HTMLCanvasElement>) {
+// Opens the print window. Must be called synchronously from within the
+// click-handler's call stack — browsers require window.open() to happen as
+// a direct consequence of a trusted user gesture, or it's silently popup-
+// blocked (no error, no console message, it just does nothing).
+export function openPrintWindow(): Window | null {
+  return window.open("", "_blank", "width=960,height=1200");
+}
+
+// Writes the actual label sheet into an already-open window. Safe to call
+// later/async (e.g. after canvases finish drawing) since the window handle
+// already exists — only the window.open() call itself is gesture-gated.
+export function writePrintDocument(w: Window, items: Sku[], qrRefs: Map<string, HTMLCanvasElement>) {
   const cells = items.map((s) => {
     const canvas = qrRefs.get(s.id!);
     const dataUrl = canvas?.toDataURL("image/png") ?? "";
@@ -32,8 +43,6 @@ export function buildPrintWindow(items: Sku[], qrRefs: Map<string, HTMLCanvasEle
       </div>`;
   }).join("");
 
-  const w = window.open("", "_blank", "width=960,height=1200");
-  if (!w) return;
   w.document.write(`<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <title>QR Labels (${items.length})</title>
@@ -73,7 +82,6 @@ export function buildPrintWindow(items: Sku[], qrRefs: Map<string, HTMLCanvasEle
   <div class="grid">${cells}</div>
   <script>window.onload = () => { setTimeout(() => window.print(), 300); }</script>
 </body></html>`);
-  w.document.close();
 }
 
 // Pure canvas container — renders hidden QR canvases on demand, only for the
@@ -86,6 +94,7 @@ export function buildPrintWindow(items: Sku[], qrRefs: Map<string, HTMLCanvasEle
 export const QrSheet = forwardRef<QrSheetHandle, object>((_props, ref) => {
   const [printQueue, setPrintQueue] = useState<Sku[] | null>(null);
   const qrRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const pendingWindowRef = useRef<Window | null>(null);
 
   const setRef = (id: string) => (el: HTMLCanvasElement | null) => {
     if (el) qrRefs.current.set(id, el);
@@ -94,6 +103,9 @@ export const QrSheet = forwardRef<QrSheetHandle, object>((_props, ref) => {
 
   useImperativeHandle(ref, () => ({
     printItems(itemsToPrint: Sku[]) {
+      // Open synchronously, in the same click gesture, so it isn't popup-
+      // blocked — content gets written into it once canvases are ready.
+      pendingWindowRef.current = openPrintWindow();
       qrRefs.current.clear();
       setPrintQueue(itemsToPrint);
     },
@@ -103,7 +115,12 @@ export const QrSheet = forwardRef<QrSheetHandle, object>((_props, ref) => {
   // effects flush before this parent effect), so the refs are ready to read.
   useEffect(() => {
     if (!printQueue) return;
-    buildPrintWindow(printQueue, qrRefs.current);
+    const w = pendingWindowRef.current;
+    pendingWindowRef.current = null;
+    if (w) {
+      writePrintDocument(w, printQueue, qrRefs.current);
+      w.document.close();
+    }
     setPrintQueue(null);
   }, [printQueue]);
 
