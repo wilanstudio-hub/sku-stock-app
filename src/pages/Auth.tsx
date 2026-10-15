@@ -103,7 +103,7 @@ const Auth = () => {
         <div className="flex flex-col items-center mb-6">
           <AppLogo theme="auto" variant="full" className="h-11 w-auto mb-3" />
           <h1 className="text-xl font-bold">
-            {tenant ? `${tenant.name} · Inventory` : "SKU Stock"}
+            {tenant ? `${tenant.name} · Inventory` : "Ctrl+ Inventory"}
           </h1>
           <p className="text-sm text-muted-foreground font-th">{t.appSubtitle}</p>
           <button

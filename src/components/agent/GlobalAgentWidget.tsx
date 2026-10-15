@@ -70,7 +70,7 @@ export const GlobalAgentWidget: React.FC = () => {
     {
       id: "welcome",
       role: "assistant",
-      content: `👋 สวัสดีครับ! ผมคือ **SKU Stock Agent** ผู้ช่วยจัดการสต๊อกและอุปกรณ์กองถ่ายสำหรับ **${tenant?.name || "สตูดิโอ"}**\n\nพิมพ์ถามสต๊อก, ตรวจสอบของว่าง, ทำเรื่องเบิก-คืน หรือให้แนะนำ Kit อุปกรณ์กองถ่ายได้เลยครับ!`,
+      content: `👋 สวัสดีครับ! ผมคือ **Ctrl+ Inventory Agent** ผู้ช่วยจัดการสต๊อกและอุปกรณ์กองถ่ายสำหรับ **${tenant?.name || "สตูดิโอ"}**\n\nพิมพ์ถามสต๊อก, ตรวจสอบของว่าง, ทำเรื่องเบิก-คืน หรือให้แนะนำ Kit อุปกรณ์กองถ่ายได้เลยครับ!`,
       timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
     },
   ]);
@@ -222,7 +222,7 @@ export const GlobalAgentWidget: React.FC = () => {
       {
         id: "welcome",
         role: "assistant",
-        content: `👋 เริ่มต้นการสนทนาใหม่กับ **SKU Stock Agent** สำหรับ **${tenant?.name || "สตูดิโอ"}**`,
+        content: `👋 เริ่มต้นการสนทนาใหม่กับ **Ctrl+ Inventory Agent** สำหรับ **${tenant?.name || "สตูดิโอ"}**`,
         timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
       },
     ]);
@@ -278,13 +278,13 @@ export const GlobalAgentWidget: React.FC = () => {
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-5 right-5 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-primary text-primary-foreground shadow-2xl hover:scale-105 transition-all duration-200 border border-primary-foreground/20 group"
-          title="เปิด SKU Stock Agent"
+          title="เปิด Ctrl+ Inventory Agent"
         >
           <div className="relative flex items-center justify-center">
             <AppLogo theme="dark" variant="icon" className="w-5 h-5" />
             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-primary animate-pulse" />
           </div>
-          <span className="text-xs font-semibold tracking-wide">SKU Stock Agent</span>
+          <span className="text-xs font-semibold tracking-wide">Ctrl+ Inventory Agent</span>
         </button>
       )}
 
@@ -297,7 +297,7 @@ export const GlobalAgentWidget: React.FC = () => {
               <AppLogo theme="auto" variant="icon" className="w-6 h-6 shrink-0" />
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-sm">SKU Stock Agent</span>
+                  <span className="font-bold text-sm">Ctrl+ Inventory Agent</span>
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/20">
                     Inventory
                   </Badge>
@@ -404,7 +404,7 @@ export const GlobalAgentWidget: React.FC = () => {
             {loading && (
               <div className="flex items-center gap-2 text-muted-foreground text-xs p-2">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span>SKU Stock Agent กำลังคิดและประมวลผล...</span>
+                <span>Ctrl+ Inventory Agent กำลังคิดและประมวลผล...</span>
               </div>
             )}
 
@@ -464,7 +464,7 @@ export const GlobalAgentWidget: React.FC = () => {
               การตั้งค่า AI Provider
             </DialogTitle>
             <DialogDescription>
-              เลือกระบบโมเดล AI ที่ต้องการใช้งานสำหรับ SKU Stock Agent
+              เลือกระบบโมเดล AI ที่ต้องการใช้งานสำหรับ Ctrl+ Inventory Agent
             </DialogDescription>
           </DialogHeader>
 

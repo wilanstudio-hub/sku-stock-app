@@ -244,7 +244,7 @@ describe("E2E Smoke Tests: Core Inventory Flows", () => {
     });
   });
 
-  describe("7. SKU Stock Logo Brand Rules", () => {
+  describe("7. Ctrl+ Inventory Logo Brand Rules", () => {
     const LOGO_ASSETS = {
       dark: {
         full: "/branding/ctrlplus-logo-dark.png",

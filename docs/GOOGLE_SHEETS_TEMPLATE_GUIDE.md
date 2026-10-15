@@ -1,12 +1,12 @@
-# FilmFlow Inventory — Google Sheets Template & Sync Guide
+# Ctrl+ Inventory — Google Sheets Template & Sync Guide
 
-> This guide outlines the standard spreadsheet column structures required for automated 2-way synchronization with FilmFlow Inventory.
+> This guide outlines the standard spreadsheet column structures required for automated 2-way synchronization with Ctrl+ Inventory.
 
 ---
 
 ## 1. Google Service Account Permission Setup
 
-Before syncing, share your Google Spreadsheet with the FilmFlow Sync Service Account:
+Before syncing, share your Google Spreadsheet with the Ctrl+ Inventory sync service account:
 ```
 Email: filmflow-sheet-sync-bot@filmflow-inventory-sync.iam.gserviceaccount.com
 Role:  Viewer (or Editor if 2-way writeback is enabled)
@@ -62,7 +62,7 @@ Categorized by characters, cast members, or costume racks (e.g. `Lead Actor`, `S
 
 ## 3. Image URL Format Guidelines
 
-FilmFlow Inventory automatically extracts direct high-resolution thumbnails from any standard Google Drive sharing URL:
+Ctrl+ Inventory automatically extracts direct high-resolution thumbnails from any standard Google Drive sharing URL:
 - ✅ `https://drive.google.com/file/d/1AbC-xyz123_456789/view?usp=sharing`
 - ✅ `https://drive.google.com/open?id=1AbC-xyz123_456789`
 - ✅ `1AbC-xyz123_456789abcdefgh` (Bare File ID)

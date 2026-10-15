@@ -45,7 +45,7 @@ export const SAAS_PLANS: PlanConfig[] = [
       "1 ผู้ดูแลระบบ (Single Admin)",
       "ไม่จำกัดจำนวนรายการ SKU",
       "Google Sheets Real-time Sync",
-      "SKU Stock AI Agent พื้นฐาน",
+      "Ctrl+ Inventory AI Agent พื้นฐาน",
     ],
   },
   {
@@ -57,7 +57,7 @@ export const SAAS_PLANS: PlanConfig[] = [
     features: [
       "สูงสุด 8 สมาชิกพร้อมกัน",
       "รองรับแยกแผนก Art, WD, Equipment อิสระ",
-      "SKU Stock AI Agent เต็มรูปแบบ",
+      "Ctrl+ Inventory AI Agent เต็มรูปแบบ",
       "ประวัติการเบิก-คืน & Timeline ละเอียด",
       "QR Batch Sheets & Label Generator",
     ],

@@ -92,11 +92,11 @@ export function buildSystemPrompt(context: AgentContextProps): string {
     (t) => `- ${t.name}: ${t.description} (Args: ${JSON.stringify(t.parameters)})`
   ).join("\n");
 
-  return `You are SKU Stock Agent, the intelligent AI copilot specialized in Film & Video Production Inventory, Equipment Tracking, and SKU Stock Management.
+  return `You are Ctrl+ Inventory Agent, the intelligent AI copilot specialized in Film & Video Production Inventory, Equipment Tracking, and SKU management.
 You communicate primarily in clear, polite, and helpful Thai (or match the user's language).
 
 [STUDIO WORKSPACE CONTEXT]
-- Studio / Tenant: ${context.tenantName || "FilmFlow Studio"} (${context.tenantSlug || "main"})
+- Studio / Tenant: ${context.tenantName || "Ctrl+ Inventory"} (${context.tenantSlug || "main"})
 - Current Page: ${pageCtx.label} (${context.currentPath})
 - Active Department: ${context.activeDepartment || "all"}
 - Available Departments: ${deptList || "Art, Equipment, WD"}

@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
 
       // Line item (recurring monthly THB)
       params.append("line_items[0][price_data][currency]", "thb");
-      params.append("line_items[0][price_data][product_data][name]", `FilmFlow Ctrl+ ${plan.name} (${plan.seatLimit} Seats)`);
+      params.append("line_items[0][price_data][product_data][name]", `Ctrl+ Inventory ${plan.name} (${plan.seatLimit} Seats)`);
       params.append("line_items[0][price_data][recurring][interval]", "month");
       params.append("line_items[0][price_data][unit_amount]", String(plan.priceBaht * 100));
       params.append("line_items[0][quantity]", "1");

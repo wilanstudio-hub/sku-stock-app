@@ -60,7 +60,7 @@ export const QrDialog = ({ open, onOpenChange, sku }: Props) => {
     ctx.fillStyle = "#9ca3af";
     ctx.font = "700 8px 'Courier New', monospace";
     ctx.textAlign = "center";
-    ctx.fillText("SKU  STOCK", W / 2, PAD);
+    ctx.fillText("CTRL+ INVENTORY", W / 2, PAD);
 
     // divider below header
     let y = PAD + 6;
@@ -176,7 +176,7 @@ export const QrDialog = ({ open, onOpenChange, sku }: Props) => {
 </style></head>
 <body>
   <div class="label">
-    <div class="header">SKU &nbsp; STOCK</div>
+    <div class="header">Ctrl+ Inventory</div>
     <hr>
     <img class="qr" src="${qrDataUrl}" alt="QR Code">
     <hr>
@@ -202,7 +202,7 @@ export const QrDialog = ({ open, onOpenChange, sku }: Props) => {
         <div className="flex flex-col items-center gap-4 py-1">
           <div className="border border-border rounded-xl px-5 py-4 w-full text-center shadow-sm bg-white">
             <p className="text-[9px] font-mono tracking-[3px] text-muted-foreground uppercase mb-2.5">
-              SKU &nbsp; STOCK
+              Ctrl+ Inventory
             </p>
             <div className="h-px bg-muted mb-3.5" />
             <div className="flex justify-center">

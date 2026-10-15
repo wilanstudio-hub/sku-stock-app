@@ -11,11 +11,11 @@ export interface AppLogoProps {
   className?: string;
 }
 
-/** SKU Stock logo: the original Package-icon-in-gradient-box mark. */
+/** Ctrl+ Inventory logo: the original Package-icon-in-gradient-box mark. */
 export function AppLogo({
   className,
   variant = "full",
-  alt = "SKU Stock",
+  alt = "Ctrl+ Inventory",
 }: AppLogoProps) {
   const icon = (
     <div
@@ -35,7 +35,7 @@ export function AppLogo({
   return (
     <div className={cn("flex items-center gap-2", className)}>
       {icon}
-      <span className="font-bold text-lg text-foreground whitespace-nowrap">SKU Stock</span>
+      <span className="font-bold text-lg text-foreground whitespace-nowrap">Ctrl+ Inventory</span>
     </div>
   );
 }

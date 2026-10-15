@@ -1,5 +1,5 @@
 /**
- * FilmFlow Inventory - Page-aware Context for AI Agent
+ * Ctrl+ Inventory - Page-aware Context for AI Agent
  * Maps the current route to a short label + relevant inventory agent tools.
  */
 export interface PageContext {
@@ -55,7 +55,7 @@ const PAGE_CONTEXTS: Array<{ prefix: string; context: PageContext }> = [
 ];
 
 const DEFAULT_CONTEXT: PageContext = {
-  label: "ระบบจัดการสต๊อก FilmFlow",
+  label: "ระบบจัดการสต๊อก Ctrl+ Inventory",
   relevantTools: ["search_sku_item", "check_item_availability", "recommend_equipment_kit"],
 };
 

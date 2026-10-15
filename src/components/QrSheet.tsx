@@ -31,7 +31,7 @@ export function writePrintDocument(w: Window, items: Sku[], qrRefs: Map<string, 
     const cat = s.category ? ` · ${s.category}` : "";
     return `
       <div class="cell">
-        <div class="header">SKU &nbsp; STOCK</div>
+        <div class="header">Ctrl+ Inventory</div>
         <hr>
         <img class="qr" src="${dataUrl}" alt="QR">
         <hr>

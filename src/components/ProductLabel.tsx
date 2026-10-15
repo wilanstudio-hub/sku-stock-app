@@ -34,8 +34,8 @@ export function ProductLabel({ sku, className = "" }: Props) {
     >
       {/* ── Header ───────────────────────────────────────────── */}
       <div className="flex justify-between items-center font-mono text-[10px] tracking-[0.2em] uppercase text-gray-400">
-        <span>SKU</span>
-        <span>STOCK</span>
+        <span>Ctrl+</span>
+        <span>Inventory</span>
       </div>
 
       <hr className="border-gray-100" />

@@ -1,12 +1,12 @@
-# FilmFlow Inventory — Commercial Buyer & Deployment Manual
+# Ctrl+ Inventory — Commercial Buyer & Deployment Manual
 
-> A complete guide for enterprise customers, film production houses, and SaaS subscribers to deploy, configure, and operate FilmFlow Inventory.
+> A complete guide for enterprise customers, film production houses, and SaaS subscribers to deploy, configure, and operate Ctrl+ Inventory.
 
 ---
 
 ## 1. Architecture Overview
 
-FilmFlow Inventory is built for zero-maintenance serverless operation:
+Ctrl+ Inventory is built for zero-maintenance serverless operation:
 - **Frontend**: React 18, Vite, TypeScript, Tailwind CSS, Radix UI (Hosted on Cloudflare Pages / Vercel).
 - **Backend / Database**: Supabase PostgreSQL with Row Level Security (RLS) and real-time triggers.
 - **Sync Engine**: Deno Edge Functions using Google Sheets API v4 with Service Account OAuth2 authentication.
@@ -68,7 +68,7 @@ npx wrangler pages deploy dist --project-name your-inventory-app
 
 1. Create a Google Sheet following the specifications in [`GOOGLE_SHEETS_TEMPLATE_GUIDE.md`](./GOOGLE_SHEETS_TEMPLATE_GUIDE.md).
 2. Share the Google Sheet with your configured Service Account email as **Viewer**.
-3. In FilmFlow Inventory, log in as Admin and navigate to `/admin` or click **"จัดการคลัง"** on the target department tab.
+3. In Ctrl+ Inventory, log in as Admin and navigate to `/admin` or click **"จัดการคลัง"** on the target department tab.
 4. Paste the Google Sheet URL and click **Sync ข้อมูล**.
 
 ---
@@ -83,7 +83,7 @@ To enable automatic subdomain routing for multiple client studios (`studio-a.you
    - **Target**: `your-inventory-app.pages.dev`
    - **Proxy status**: `Proxied (Orange cloud)`
 2. In Cloudflare Pages Settings → **Custom Domains**, add `*.yourdomain.com`.
-3. When a user navigates to `https://acme.yourdomain.com`, FilmFlow automatically scopes their workspace, branding, and access permissions to `acme`.
+3. When a user navigates to `https://acme.yourdomain.com`, Ctrl+ Inventory automatically scopes their workspace, branding, and access permissions to `acme`.
 
 ---
 

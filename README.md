@@ -1,4 +1,4 @@
-# FilmFlow Inventory — Production Equipment & SKU Tracker
+# Ctrl+ Inventory — Production Equipment & SKU Tracker
 
 > A modern, bilingual (Thai / English) inventory management and field tracking platform built for film productions, broadcast studios, rental houses, and dynamic multi-department operations.
 
@@ -73,7 +73,7 @@ npx supabase secrets set GOOGLE_SERVICE_ACCOUNT_EMAIL="your-service-account@gcp-
 npx supabase secrets set GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 npx supabase secrets set RESEND_API_KEY="re_..."
 npx supabase secrets set APP_URL="https://your-domain.pages.dev"
-npx supabase secrets set APP_NAME="FilmFlow Inventory"
+npx supabase secrets set APP_NAME="Ctrl+ Inventory"
 
 # Deploy edge functions
 npx supabase functions deploy sync-art-sheets

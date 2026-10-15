@@ -228,9 +228,9 @@ export default function ScanPage() {
           <div className="flex justify-between items-center px-5 pt-5 pb-3 font-mono text-[11px] tracking-[0.1em] uppercase text-gray-400">
             <span className="flex items-center gap-1.5 font-bold text-gray-700">
               <AppLogo theme="light" variant="icon" className="h-4 w-4" />
-              <span>{tenant?.name || "SKU Stock"}</span>
+              <span>{tenant?.name || "Ctrl+ Inventory"}</span>
             </span>
-            <span>SKU · STOCK</span>
+            <span>Ctrl+ Inventory</span>
           </div>
 
           <hr className="border-gray-100 mx-5" />

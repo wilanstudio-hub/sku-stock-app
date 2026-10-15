@@ -175,7 +175,7 @@ const Index = () => {
             <AppLogo theme="auto" variant="icon" className="h-9 w-9 shrink-0" />
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-bold leading-tight">{tenant?.name || "SKU Stock"}</h1>
+                <h1 className="font-bold leading-tight">{tenant?.name || "Ctrl+ Inventory"}</h1>
                 {tenant && (
                   <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-primary/5 text-primary border-primary/20">
                     {tenant.slug}
@@ -242,7 +242,7 @@ const Index = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => nav("/ai-agent")}
-                  title="SKU Stock AI Studio Agent"
+                  title="Ctrl+ Inventory AI Studio Agent"
                   className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
                 >
                   <Sparkles className="w-4 h-4 text-primary" />

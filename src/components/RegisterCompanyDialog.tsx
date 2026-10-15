@@ -129,7 +129,7 @@ export const RegisterCompanyDialog: React.FC<RegisterCompanyDialogProps> = ({
               </div>
               <DialogTitle className="text-xl">สร้างระบบสต็อกสำหรับสตูดิโอของคุณ</DialogTitle>
               <DialogDescription>
-                ลงทะเบียนรับระบบจัดการสต็อก FilmFlow แยกฐานข้อมูลและ Subdomain เฉพาะของบริษัทคุณ
+                ลงทะเบียนรับระบบจัดการสต็อก Ctrl+ Inventory แยกฐานข้อมูลและ Subdomain เฉพาะของบริษัทคุณ
               </DialogDescription>
             </DialogHeader>
 

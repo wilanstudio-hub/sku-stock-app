@@ -114,7 +114,7 @@ export default function AIAgentPage() {
       {
         id: "welcome",
         role: "assistant",
-        content: `👋 สวัสดีครับ! ผมคือ **SKU Stock Agent** ผู้ช่วยอัจฉริยะด้านการวางแผนอุปกรณ์และคลังสต๊อกสำหรับ **${tenant?.name || "สตูดิโอของคุณ"}**\n\n- ค้นหาอุปกรณ์ตามชื่อ/รหัส\n- เช็คสถานะพร้อมใช้หรือผู้ที่เบิกของไป\n- แนะนำ Kit อุปกรณ์ตามรูปแบบงานกองถ่าย\n- แนบเอกสารอ้างอิง (Call Sheet, PDF, CSV) เพื่อให้ตอบอิงข้อมูลจริงได้`,
+        content: `👋 สวัสดีครับ! ผมคือ **Ctrl+ Inventory Agent** ผู้ช่วยอัจฉริยะด้านการวางแผนอุปกรณ์และคลังสต๊อกสำหรับ **${tenant?.name || "สตูดิโอของคุณ"}**\n\n- ค้นหาอุปกรณ์ตามชื่อ/รหัส\n- เช็คสถานะพร้อมใช้หรือผู้ที่เบิกของไป\n- แนะนำ Kit อุปกรณ์ตามรูปแบบงานกองถ่าย\n- แนบเอกสารอ้างอิง (Call Sheet, PDF, CSV) เพื่อให้ตอบอิงข้อมูลจริงได้`,
         timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
       },
     ];
@@ -175,8 +175,8 @@ export default function AIAgentPage() {
         sourcesContext = `\n\n[ATTACHED REFERENCE DOCUMENTS / KNOWLEDGE BASE]\n${sourceBlocks.join("\n\n")}\nRule: When referencing facts from attached documents, mention the document name.`;
       }
 
-      const systemPrompt = `You are SKU Stock Agent on the dedicated Full AI Dashboard for Film & Video Production Inventory.
-Studio: ${tenant?.name || "FilmFlow Studio"} (${tenant?.slug || "main"})
+      const systemPrompt = `You are Ctrl+ Inventory Agent on the dedicated Full AI Dashboard for Film & Video Production Inventory.
+Studio: ${tenant?.name || "Ctrl+ Inventory"} (${tenant?.slug || "main"})
 User: ${user?.email || "crew"} (Roles: ${roles.join(", ")})
 Filter Department: ${selectedDept === "all" ? "All Departments (Art, Equipment, WD)" : selectedDept}
 ${sourcesContext}
@@ -307,7 +307,7 @@ Strict rule: Respond with a valid JSON object matching:
       {
         id: "welcome",
         role: "assistant",
-        content: `👋 เริ่มต้นการสนทนาใหม่กับ **SKU Stock Agent** สำหรับ **${tenant?.name || "สตูดิโอของคุณ"}**`,
+        content: `👋 เริ่มต้นการสนทนาใหม่กับ **Ctrl+ Inventory Agent** สำหรับ **${tenant?.name || "สตูดิโอของคุณ"}**`,
         timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
       },
     ]);
@@ -361,7 +361,7 @@ Strict rule: Respond with a valid JSON object matching:
               <AppLogo theme="auto" variant="icon" className="h-7 w-7" />
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="font-bold text-sm sm:text-base leading-tight">SKU Stock AI Studio Agent</h1>
+                  <h1 className="font-bold text-sm sm:text-base leading-tight">Ctrl+ Inventory AI Studio Agent</h1>
                   <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
                     Production Copilot
                   </Badge>
@@ -446,7 +446,7 @@ Strict rule: Respond with a valid JSON object matching:
                     ) : (
                       <div className="flex items-center gap-1 font-semibold text-primary">
                         <Sparkles className="w-3 h-3" />
-                        <span>SKU Stock Agent</span>
+                        <span>Ctrl+ Inventory Agent</span>
                       </div>
                     )}
                     <span>•</span>
