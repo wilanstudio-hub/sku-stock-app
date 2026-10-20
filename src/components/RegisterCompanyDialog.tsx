@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Building2, CheckCircle2, Sparkles, Loader2, Globe } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useLang } from "@/hooks/useLang";
 
 interface RegisterCompanyDialogProps {
   trigger?: React.ReactNode;
@@ -24,6 +25,7 @@ export const RegisterCompanyDialog: React.FC<RegisterCompanyDialogProps> = ({
   open: controlledOpen,
   onOpenChange: setControlledOpen,
 }) => {
+  const { t } = useLang();
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -45,7 +47,7 @@ export const RegisterCompanyDialog: React.FC<RegisterCompanyDialogProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!companyName.trim() || !slug.trim() || !contactEmail.trim()) {
-      setError("กรุณากรอกข้อมูลให้ครบถ้วน");
+      setError(t.regIncomplete);
       return;
     }
 
@@ -61,7 +63,7 @@ export const RegisterCompanyDialog: React.FC<RegisterCompanyDialogProps> = ({
         .maybeSingle();
 
       if (existing) {
-        setError(`ชื่อ Subdomain "${slug}" ถูกใช้งานแล้ว กรุณาเลือกชื่ออื่น`);
+        setError(t.slugTaken(slug));
         setSubmitting(false);
         return;
       }
@@ -79,7 +81,7 @@ export const RegisterCompanyDialog: React.FC<RegisterCompanyDialogProps> = ({
 
       setSuccess(true);
     } catch (err: any) {
-      setError(err?.message || "เกิดข้อผิดพลาดในการลงทะเบียน กรุณาลองใหม่อีกครั้ง");
+      setError(err?.message || t.regFailed);
     } finally {
       setSubmitting(false);
     }
@@ -104,21 +106,21 @@ export const RegisterCompanyDialog: React.FC<RegisterCompanyDialogProps> = ({
             <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-600 mb-4">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <DialogTitle className="text-2xl font-bold mb-2">ลงทะเบียนสตูดิโอสำเร็จ!</DialogTitle>
+            <DialogTitle className="text-2xl font-bold mb-2">{t.regSuccessTitle}</DialogTitle>
             <DialogDescription className="text-base text-muted-foreground max-w-sm mb-6">
-              เราได้รับคำขอสร้างระบบสำหรับ <strong className="text-foreground">{companyName}</strong> แล้ว ทีมงานจะเปิดใช้งาน Workspace ของคุณภายใน 24 ชม.
+              {t.regSuccessBody} <strong className="text-foreground">{companyName}</strong> {t.regSuccessTail}
             </DialogDescription>
             <div className="bg-muted/60 p-4 rounded-xl border text-left w-full mb-6 text-sm">
               <div className="flex items-center gap-2 text-primary font-medium mb-1">
                 <Globe className="w-4 h-4" />
-                <span>ลิงก์ Workspace ของคุณ:</span>
+                <span>{t.workspaceLink}</span>
               </div>
               <p className="font-mono text-xs text-muted-foreground break-all">
                 https://{slug}.inventory.filmflow.com
               </p>
             </div>
             <Button onClick={handleReset} className="w-full">
-              เสร็จสิ้น
+              {t.done}
             </Button>
           </div>
         ) : (
@@ -127,9 +129,9 @@ export const RegisterCompanyDialog: React.FC<RegisterCompanyDialogProps> = ({
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
                 <Building2 className="w-5 h-5" />
               </div>
-              <DialogTitle className="text-xl">สร้างระบบสต็อกสำหรับสตูดิโอของคุณ</DialogTitle>
+              <DialogTitle className="text-xl">{t.regTitle}</DialogTitle>
               <DialogDescription>
-                ลงทะเบียนรับระบบจัดการสต็อก Ctrl+ Inventory แยกฐานข้อมูลและ Subdomain เฉพาะของบริษัทคุณ
+                {t.regDesc}
               </DialogDescription>
             </DialogHeader>
 
@@ -141,10 +143,10 @@ export const RegisterCompanyDialog: React.FC<RegisterCompanyDialogProps> = ({
 
             <div className="space-y-3">
               <div className="space-y-1">
-                <Label htmlFor="companyName">ชื่อสตูดิโอ / บริษัท *</Label>
+                <Label htmlFor="companyName">{t.companyName}</Label>
                 <Input
                   id="companyName"
-                  placeholder="เช่น Acme Production Studio"
+                  placeholder={t.companyPlaceholder}
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                   required
@@ -152,7 +154,7 @@ export const RegisterCompanyDialog: React.FC<RegisterCompanyDialogProps> = ({
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="slug">Subdomain ที่ต้องการ *</Label>
+                <Label htmlFor="slug">{t.slugLabel}</Label>
                 <div className="flex items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
                   <Input
                     id="slug"
@@ -167,22 +169,22 @@ export const RegisterCompanyDialog: React.FC<RegisterCompanyDialogProps> = ({
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  ใช้อักษรภาษาอังกฤษพิมพ์เล็ก ตัวเลข และขีดกลาง (-) เท่านั้น
+                  {t.slugHint}
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label htmlFor="contactName">ชื่อผู้ติดต่อ</Label>
+                  <Label htmlFor="contactName">{t.contactName}</Label>
                   <Input
                     id="contactName"
-                    placeholder="คุณสมชาย"
+                    placeholder={t.contactPlaceholder}
                     value={contactName}
                     onChange={(e) => setContactName(e.target.value)}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="contactEmail">อีเมลผู้ติดต่อ *</Label>
+                  <Label htmlFor="contactEmail">{t.contactEmail}</Label>
                   <Input
                     id="contactEmail"
                     type="email"
@@ -197,16 +199,16 @@ export const RegisterCompanyDialog: React.FC<RegisterCompanyDialogProps> = ({
 
             <div className="pt-2 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                ยกเลิก
+                {t.cancel}
               </Button>
               <Button type="submit" disabled={submitting} className="gap-2">
                 {submitting ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> กำลังส่งข้อมูล...
+                    <Loader2 className="w-4 h-4 animate-spin" /> {t.sending}
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4" /> เริ่มต้นใช้งาน
+                    <Sparkles className="w-4 h-4" /> {t.getStarted}
                   </>
                 )}
               </Button>

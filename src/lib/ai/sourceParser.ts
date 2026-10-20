@@ -2,6 +2,7 @@
  * Source parser and extractor for Ctrl+ Inventory AI Knowledge Base (NotebookLM Mode)
  * Supports .txt, .md, .fountain, .pdf, .csv, .json, .srt, .tsv, etc.
  */
+import { currentTranslations } from "@/lib/uiText";
 
 export interface KnowledgeSource {
   id: string;
@@ -151,10 +152,10 @@ async function extractTextFromPdf(file: File): Promise<string> {
       return fallbackLines.join("\n\n").replace(/[ \t]+/g, " ");
     }
 
-    return `[PDF Document: ${file.name} (${formatBytes(file.size)}) - เนื้อหาถูกประมวลผล]`;
+    return currentTranslations().pdfParsed(file.name, formatBytes(file.size));
   } catch (err) {
     console.warn("PDF extraction fallback:", err);
-    return `[PDF Document: ${file.name} - ไม่สามารถอ่านตัวหนังสือได้โดยตรง]`;
+    return currentTranslations().pdfUnreadable(file.name);
   }
 }
 

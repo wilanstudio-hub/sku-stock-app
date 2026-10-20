@@ -21,6 +21,9 @@ import {
   ShieldCheck, ClipboardList, Plus, Edit2, Sparkles, Film, MapPin
 } from "lucide-react";
 import type { Department } from "@/hooks/useAuth";
+import { isDemoMode } from "@/lib/demo/mode";
+import { DEMO_DEPARTMENTS } from "@/lib/demo/catalog";
+import { displayDeptName } from "@/lib/uiText";
 
 interface RegisteredSheet {
   id: string;
@@ -58,7 +61,7 @@ const Index = () => {
   // ── Data loaders ──────────────────────────────────────────────────────────
 
   const loadActiveReservationsCount = async () => {
-    if (!tenant?.id) return;
+    if (isDemoMode() || !tenant?.id) return;
     try {
       const { count, error } = await supabase
         .from("inventory_reservations")
@@ -80,11 +83,19 @@ const Index = () => {
   }, [user, tenant?.id]);
 
   const loadDepartments = async () => {
+    if (isDemoMode()) {
+      setDepartments(DEMO_DEPARTMENTS);
+      return;
+    }
     const { data } = await supabase.from("departments").select("*").order("order_index");
     setDepartments(data ?? []);
   };
 
   const loadRegisteredSheets = async (deptCode: string) => {
+    if (isDemoMode()) {
+      setRegisteredSheets([]);
+      return;
+    }
     const { data } = await supabase
       .from("google_sheets_registry")
       .select("id, name, sheet_id, sku_prefix")
@@ -138,7 +149,7 @@ const Index = () => {
     <div className="flex justify-end pb-1">
       <button
         onClick={() => setManageSheetsOpen(true)}
-        title={`จัดการคลัง Google Sheets (${activeDeptObj?.name_th})`}
+        title={t.manageSheetsTitle(displayDeptName(activeDeptObj ?? { code: activeDept, name_th: activeDept }, lang))}
         className={cn(
           "inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium",
           "border border-dashed transition-colors",
@@ -146,7 +157,7 @@ const Index = () => {
         )}
       >
         <Plus className="w-3 h-3" />
-        จัดการคลัง
+        {t.manageSheetsBtn}
       </button>
     </div>
   ) : undefined;
@@ -190,7 +201,7 @@ const Index = () => {
             <div className="flex items-center border border-border rounded overflow-hidden">
               <button
                 onClick={() => setFontSize("normal")}
-                title="ขนาดปกติ"
+                title={t.fontNormal}
                 className={cn(
                   "flex items-center justify-center px-2.5 h-7 text-xs font-semibold transition-colors",
                   fontSize === "normal" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
@@ -200,7 +211,7 @@ const Index = () => {
               </button>
               <button
                 onClick={() => setFontSize("large")}
-                title="ขนาดใหญ่"
+                title={t.fontLarge}
                 className={cn(
                   "flex items-center justify-center px-2.5 h-7 text-sm font-semibold border-l border-border transition-colors",
                   fontSize === "large" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
@@ -210,7 +221,7 @@ const Index = () => {
               </button>
               <button
                 onClick={() => setFontSize("xlarge")}
-                title="ขนาดใหญ่พิเศษ"
+                title={t.fontXLarge}
                 className={cn(
                   "flex items-center justify-center px-2.5 h-7 text-base font-semibold border-l border-border transition-colors",
                   fontSize === "xlarge" ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"
@@ -252,7 +263,7 @@ const Index = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => setTxHistoryOpen(true)}
-                  title="ประวัติการเบิก-คืน"
+                  title={t.historyLogTitle}
                   className="gap-1.5"
                 >
                   <ClipboardList className="w-4 h-4" />
@@ -262,7 +273,7 @@ const Index = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => setZonesOpen(true)}
-                  title="รูปพื้นที่เก็บของ (Storage Zones)"
+                  title={t.zonesTitle}
                   className="gap-1.5"
                 >
                   <MapPin className="w-4 h-4" />
@@ -306,18 +317,18 @@ const Index = () => {
                 )}
               >
                 {renderIcon(dept.icon)}
-                {dept.name_th}
+                {displayDeptName(dept, lang)}
               </button>
             ))}
             
             {isAdmin && (
               <button
                 onClick={() => setManageDeptsOpen(true)}
-                title="จัดการแท็บหลัก (หมวดหมู่)"
+                title={t.manageTabsTitle}
                 className="ml-auto flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-full hover:bg-accent transition-colors border border-transparent hover:border-border"
               >
                 <Edit2 className="w-3.5 h-3.5" />
-                จัดการแท็บหลัก
+                {t.manageTabsBtn}
               </button>
             )}
           </div>
@@ -369,7 +380,7 @@ const Index = () => {
               open={manageSheetsOpen}
               onOpenChange={setManageSheetsOpen}
               departmentCode={activeDeptObj.code}
-              departmentName={activeDeptObj.name_th}
+              departmentName={displayDeptName(activeDeptObj, lang)}
               onUpdated={() => loadRegisteredSheets(activeDeptObj.code)}
             />
           )}

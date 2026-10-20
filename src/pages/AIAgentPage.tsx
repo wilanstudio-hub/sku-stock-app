@@ -66,20 +66,20 @@ import {
   formatBytes,
 } from "@/lib/ai/sourceParser";
 
-const QUICK_ACTIONS = [
-  { label: "🔍 ค้นหากล้องว่าง", query: "มีกล้องอะไรว่างในคลังบ้าง" },
-  { label: "💡 ค้นหาอุปกรณ์ไฟ", query: "มีไฟและอุปกรณ์จัดแสงอะไรพร้อมใช้งานบ้าง" },
-  { label: "📤 ของที่ยังไม่คืน", query: "สรุปรายการอุปกรณ์ที่กำลังถูกเบิกออกอยู่ตอนนี้" },
-  { label: "🎬 แนะนำ Kit โฆษณา", query: "แนะนำชุดอุปกรณ์สำหรับถ่ายทำโฆษณา (Commercial Shoot)" },
-  { label: "🎬 แนะนำ Kit สัมภาษณ์", query: "แนะนำชุดอุปกรณ์สำหรับถ่ายทำสัมภาษณ์ (Interview 2-Cam Setup)" },
-  { label: "📊 สรุปยอดสต๊อก", query: "สรุปภาพรวมจำนวนสต๊อกทั้งหมดในระบบ" },
-];
-
 export default function AIAgentPage() {
   const nav = useNavigate();
   const { tenant } = useTenant();
   const { user, roles } = useAuth();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const stamp = () => new Date().toLocaleTimeString(lang === "th" ? "th-TH" : "en-GB", { hour: "2-digit", minute: "2-digit" });
+  const quickActions = [
+    { label: t.aiQuickCameras, query: t.aiQuickCamerasQ },
+    { label: t.aiQuickLighting, query: t.aiQuickLightingQ },
+    { label: t.aiQuickStillOut, query: t.aiQuickOutQ },
+    { label: t.aiQuickKitAd, query: t.aiQuickKitAdQ },
+    { label: t.aiQuickKitInterview, query: t.aiQuickKitInterviewQ },
+    { label: t.aiQuickSummary, query: t.aiQuickSummaryQ },
+  ];
 
   // Settings State
   const [settings, setSettings] = useState<AISettings>(loadAISettings);
@@ -114,8 +114,8 @@ export default function AIAgentPage() {
       {
         id: "welcome",
         role: "assistant",
-        content: `👋 สวัสดีครับ! ผมคือ **Ctrl+ Inventory Agent** ผู้ช่วยอัจฉริยะด้านการวางแผนอุปกรณ์และคลังสต๊อกสำหรับ **${tenant?.name || "สตูดิโอของคุณ"}**\n\n- ค้นหาอุปกรณ์ตามชื่อ/รหัส\n- เช็คสถานะพร้อมใช้หรือผู้ที่เบิกของไป\n- แนะนำ Kit อุปกรณ์ตามรูปแบบงานกองถ่าย\n- แนบเอกสารอ้างอิง (Call Sheet, PDF, CSV) เพื่อให้ตอบอิงข้อมูลจริงได้`,
-        timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+        content: t.agentWelcomeFull(tenant?.name || t.agentStudioYours),
+        timestamp: stamp(),
       },
     ];
   });
@@ -157,7 +157,7 @@ export default function AIAgentPage() {
       id: `user-${Date.now()}`,
       role: "user",
       content: text,
-      timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+      timestamp: stamp(),
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -182,7 +182,7 @@ Filter Department: ${selectedDept === "all" ? "All Departments (Art, Equipment, 
 ${sourcesContext}
 
 Strict rule: Respond with a valid JSON object matching:
-{"tool": "tool_name", "args": {...}} OR {"reply": "คำตอบภาษาไทย..."}`;
+{"tool": "tool_name", "args": {...}} OR {"reply": "${t.agentReplyExample}"}`;
 
       const history = [...messages, userMsg].map((m) => ({
         role: m.role,
@@ -197,8 +197,8 @@ Strict rule: Respond with a valid JSON object matching:
           const confirmMsg: ChatMessage = {
             id: confirmMsgId,
             role: "assistant",
-            content: `⚠️ **คำขอยืนยันการเปลี่ยนแปลงข้อมูล**`,
-            timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+            content: t.agentConfirmTitle,
+            timestamp: stamp(),
             toolCall: res.toolCall,
             isMutating: true,
           };
@@ -214,7 +214,7 @@ Strict rule: Respond with a valid JSON object matching:
             id: `reply-${Date.now()}`,
             role: "assistant",
             content: execRes.result,
-            timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+            timestamp: stamp(),
           };
           setMessages((prev) => [...prev, replyMsg]);
         }
@@ -223,7 +223,7 @@ Strict rule: Respond with a valid JSON object matching:
           id: `reply-${Date.now()}`,
           role: "assistant",
           content: res.reply,
-          timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+          timestamp: stamp(),
         };
         setMessages((prev) => [...prev, replyMsg]);
       }
@@ -231,8 +231,8 @@ Strict rule: Respond with a valid JSON object matching:
       const errReply: ChatMessage = {
         id: `err-${Date.now()}`,
         role: "assistant",
-        content: `❌ **เกิดข้อผิดพลาดในการติดต่อ AI:** ${err?.message || String(err)}\n\n💡 *โปรดตรวจสอบ API Key หรือ Base URL โดยกดปุ่ม "ตั้งค่า AI"*`,
-        timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+        content: t.agentConnectErrorFull(err?.message || String(err)),
+        timestamp: stamp(),
       };
       setMessages((prev) => [...prev, errReply]);
     } finally {
@@ -253,7 +253,7 @@ Strict rule: Respond with a valid JSON object matching:
         id: `reply-${Date.now()}`,
         role: "assistant",
         content: execRes.result,
-        timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+        timestamp: stamp(),
       };
       setMessages((prev) => [...prev, replyMsg]);
     } catch (err: any) {
@@ -272,9 +272,9 @@ Strict rule: Respond with a valid JSON object matching:
       try {
         const source = await parseUploadedFile(file);
         setSources((prev) => [source, ...prev]);
-        toast.success(`เพิ่มเอกสาร "${file.name}" เข้าคลังความรู้แล้ว (${formatBytes(file.size)})`);
+        toast.success(t.aiDocAdded(file.name, formatBytes(file.size)));
       } catch (err: any) {
-        toast.error(`ไม่สามารถอ่านไฟล์ ${file.name}: ${err.message}`);
+        toast.error(t.aiDocReadError(file.name, err.message));
       }
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -287,7 +287,7 @@ Strict rule: Respond with a valid JSON object matching:
     setNewNoteTitle("");
     setNewNoteContent("");
     setSourcesModalOpen(false);
-    toast.success(`เพิ่มบันทึก "${source.name}" เรียบร้อยแล้ว`);
+    toast.success(t.aiNoteAdded(source.name));
   };
 
   const toggleSource = (id: string) => {
@@ -298,17 +298,17 @@ Strict rule: Respond with a valid JSON object matching:
 
   const deleteSource = (id: string) => {
     setSources((prev) => prev.filter((s) => s.id !== id));
-    toast.info("ลบเอกสารอ้างอิงแล้ว");
+    toast.info(t.aiDocRemoved);
   };
 
   const handleClearChat = () => {
-    if (!window.confirm("ต้องการล้างประวัติการสนทนาทั้งหมดหรือไม่?")) return;
+    if (!window.confirm(t.aiClearConfirm)) return;
     setMessages([
       {
         id: "welcome",
         role: "assistant",
-        content: `👋 เริ่มต้นการสนทนาใหม่กับ **Ctrl+ Inventory Agent** สำหรับ **${tenant?.name || "สตูดิโอของคุณ"}**`,
-        timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+        content: t.agentNewChat(tenant?.name || t.agentStudioYours),
+        timestamp: stamp(),
       },
     ]);
     setPendingConfirmation(null);
@@ -354,7 +354,7 @@ Strict rule: Respond with a valid JSON object matching:
       <header className="border-b bg-card/50 backdrop-blur sticky top-0 z-20">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => nav("/")} title="กลับหน้าคลัง">
+            <Button variant="ghost" size="icon" onClick={() => nav("/")} title={t.backHome}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div className="flex items-center gap-2">
@@ -367,7 +367,7 @@ Strict rule: Respond with a valid JSON object matching:
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {tenant?.name ? `สตูดิโอ: ${tenant.name}` : "Film & Video Inventory"}
+                  {tenant?.name ? t.aiStudioLine(tenant.name) : "Film & Video Inventory"}
                 </p>
               </div>
             </div>
@@ -376,11 +376,11 @@ Strict rule: Respond with a valid JSON object matching:
           <div className="flex items-center gap-2">
             <Select value={selectedDept} onValueChange={setSelectedDept}>
               <SelectTrigger className="h-8 text-xs w-auto min-w-[130px] hidden sm:flex">
-                <SelectValue placeholder="เลือกแผนก" />
+                <SelectValue placeholder={t.aiDeptPlaceholder} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">ทุกแผนก (All)</SelectItem>
-                <SelectItem value="equipment">Equipment / กล้อง</SelectItem>
+                <SelectItem value="all">{t.aiDeptAll}</SelectItem>
+                <SelectItem value="equipment">{t.aiDeptEquipment}</SelectItem>
                 <SelectItem value="art">Art Department</SelectItem>
                 <SelectItem value="wd">Wardrobe (WD)</SelectItem>
               </SelectContent>
@@ -393,7 +393,7 @@ Strict rule: Respond with a valid JSON object matching:
               onClick={() => setSourcesModalOpen(true)}
             >
               <BookOpen className="w-3.5 h-3.5 text-primary" />
-              <span className="hidden sm:inline">เอกสารอ้างอิง</span>
+              <span className="hidden sm:inline">{t.aiDocsBtn}</span>
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-0.5">
                 {sources.filter((s) => s.enabled).length}
               </Badge>
@@ -404,7 +404,7 @@ Strict rule: Respond with a valid JSON object matching:
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
               onClick={() => setSettingsOpen(true)}
-              title="ตั้งค่าโมเดล AI"
+              title={t.aiSettingsBtn}
             >
               <Settings className="w-4 h-4" />
             </Button>
@@ -414,7 +414,7 @@ Strict rule: Respond with a valid JSON object matching:
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-destructive"
               onClick={handleClearChat}
-              title="ล้างประวัติการสนทนา"
+              title={t.aiClearChat}
             >
               <Trash2 className="w-4 h-4" />
             </Button>
@@ -442,7 +442,7 @@ Strict rule: Respond with a valid JSON object matching:
                 >
                   <div className="flex items-center gap-2 mb-1.5 opacity-80 text-[11px]">
                     {isUser ? (
-                      <span className="font-semibold">คุณ</span>
+                      <span className="font-semibold">{t.aiYou}</span>
                     ) : (
                       <div className="flex items-center gap-1 font-semibold text-primary">
                         <Sparkles className="w-3 h-3" />
@@ -462,10 +462,10 @@ Strict rule: Respond with a valid JSON object matching:
                     <div className="mt-3 p-3.5 rounded-xl bg-muted/60 border border-amber-500/30 text-foreground space-y-2.5">
                       <div className="flex items-center gap-1.5 text-amber-600 font-bold text-xs">
                         <AlertTriangle className="w-4 h-4" />
-                        <span>คำขอยืนยันการเปลี่ยนแปลงข้อมูลในคลัง:</span>
+                        <span>{t.aiConfirmBody}</span>
                       </div>
                       <div className="font-mono text-xs bg-background p-2.5 rounded-lg border">
-                        <div className="text-primary font-bold mb-1">คำสั่ง: {m.toolCall.tool}</div>
+                        <div className="text-primary font-bold mb-1">{t.aiCommand(m.toolCall.tool)}</div>
                         {Object.entries(m.toolCall.args).map(([k, v]) => (
                           <div key={k} className="text-muted-foreground">
                             {k}: <span className="text-foreground font-semibold">{String(v)}</span>
@@ -479,7 +479,7 @@ Strict rule: Respond with a valid JSON object matching:
                           onClick={() => handleConfirmAction(m.toolCall!)}
                           disabled={loading}
                         >
-                          <CheckCircle2 className="w-4 h-4 mr-1" /> ยืนยันดำเนินการ
+                          <CheckCircle2 className="w-4 h-4 mr-1" /> {t.agentConfirmDo}
                         </Button>
                         <Button
                           size="sm"
@@ -492,14 +492,14 @@ Strict rule: Respond with a valid JSON object matching:
                               {
                                 id: `cancel-${Date.now()}`,
                                 role: "assistant",
-                                content: "🚫 ยกเลิกคำสั่งเรียบร้อยแล้ว",
-                                timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+                                content: t.aiCancelledShort,
+                                timestamp: stamp(),
                               },
                             ]);
                           }}
                           disabled={loading}
                         >
-                          ยกเลิก
+                          {t.cancel}
                         </Button>
                       </div>
                     </div>
@@ -512,7 +512,7 @@ Strict rule: Respond with a valid JSON object matching:
           {loading && (
             <div className="flex items-center gap-2.5 text-muted-foreground text-xs p-3 rounded-2xl bg-card border w-fit">
               <Loader2 className="w-4 h-4 animate-spin text-primary" />
-              <span>กำลังประมวลผลคำสั่งและค้นหาข้อมูลคลัง...</span>
+              <span>{t.aiProcessing}</span>
             </div>
           )}
 
@@ -521,7 +521,7 @@ Strict rule: Respond with a valid JSON object matching:
 
         {/* Quick Action Prompt Pills */}
         <div className="py-2 border-t flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          {QUICK_ACTIONS.map((qa) => (
+          {quickActions.map((qa) => (
             <button
               key={qa.label}
               onClick={() => handleSend(qa.query)}
@@ -556,14 +556,14 @@ Strict rule: Respond with a valid JSON object matching:
               size="icon"
               className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground shrink-0"
               onClick={() => fileInputRef.current?.click()}
-              title="แนบไฟล์เอกสาร (PDF, CSV, TXT, MD)"
+              title={t.aiAttach}
             >
               <Paperclip className="w-4 h-4" />
             </Button>
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="พิมพ์ถามสต๊อก, ค้นหากล้อง, วางแผนอุปกรณ์ หรือสั่งงาน AI..."
+              placeholder={t.aiInputPlaceholder}
               className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-xs font-th h-9"
               disabled={loading}
             />
@@ -574,7 +574,7 @@ Strict rule: Respond with a valid JSON object matching:
               disabled={!input.trim() || loading}
             >
               <Send className="w-3.5 h-3.5" />
-              <span>ส่ง</span>
+              <span>{t.aiSend}</span>
             </Button>
           </form>
         </div>
@@ -586,10 +586,10 @@ Strict rule: Respond with a valid JSON object matching:
           <DialogHeader>
             <div className="flex items-center gap-2 text-primary font-bold">
               <BookOpen className="w-5 h-5" />
-              <DialogTitle className="text-lg">คลังเอกสารอ้างอิง (Knowledge Base)</DialogTitle>
+              <DialogTitle className="text-lg">{t.aiKbTitle}</DialogTitle>
             </div>
             <DialogDescription>
-              อัปโหลด Call Sheet, Script, รายการอุปกรณ์ หรือคู่มือ PDF เพื่อให้ AI นำไปอ้างอิงตอบคำถาม
+              {t.aiKbDesc}
             </DialogDescription>
           </DialogHeader>
 
@@ -600,39 +600,39 @@ Strict rule: Respond with a valid JSON object matching:
               className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors"
             >
               <UploadCloud className="w-8 h-8 text-primary mx-auto mb-2" />
-              <p className="font-semibold text-xs text-foreground">คลิกเพื่ออัปโหลดไฟล์เอกสาร</p>
+              <p className="font-semibold text-xs text-foreground">{t.aiKbUpload}</p>
               <p className="text-[11px] text-muted-foreground mt-1">
-                รองรับไฟล์ .pdf, .csv, .txt, .md, .json, .srt, .fountain (สูงสุด 40,000 ตัวอักษรต่อไฟล์)
+                {t.aiKbTypes}
               </p>
             </div>
 
             {/* Manual Note Add */}
             <div className="p-3 bg-muted/40 rounded-xl border space-y-2 text-xs">
-              <span className="font-semibold text-foreground">หรือเพิ่มข้อความโน้ตด่วน:</span>
+              <span className="font-semibold text-foreground">{t.aiKbOrNote}</span>
               <Input
-                placeholder="หัวข้อโน้ต (เช่น กฎการเบิกไฟกองโฆษณา)"
+                placeholder={t.aiNoteTitle}
                 value={newNoteTitle}
                 onChange={(e) => setNewNoteTitle(e.target.value)}
                 className="h-8 text-xs"
               />
               <textarea
-                placeholder="พิมพ์เนื้อหาที่ต้องการให้ AI จดจำ..."
+                placeholder={t.aiNoteBody}
                 value={newNoteContent}
                 onChange={(e) => setNewNoteContent(e.target.value)}
                 className="w-full h-20 text-xs p-2 rounded-md border bg-background resize-none focus:outline-hidden"
               />
               <Button size="sm" onClick={handleAddTextSource} className="h-7 text-xs gap-1">
-                <Plus className="w-3.5 h-3.5" /> บันทึกโน้ต
+                <Plus className="w-3.5 h-3.5" /> {t.aiSaveNote}
               </Button>
             </div>
 
             {/* List of active sources */}
             <div className="space-y-2">
               <span className="text-xs font-semibold text-foreground">
-                เอกสารในระบบ ({sources.length} รายการ):
+                {t.aiKbList(sources.length)}
               </span>
               {sources.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-2 text-center">ยังไม่มีเอกสารในคลังความรู้</p>
+                <p className="text-xs text-muted-foreground py-2 text-center">{t.aiKbEmpty}</p>
               ) : (
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
                   {sources.map((s) => (
@@ -681,10 +681,10 @@ Strict rule: Respond with a valid JSON object matching:
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
               <Settings className="w-5 h-5 text-primary" />
-              การตั้งค่า AI Provider
+              {t.agentSettingsTitle}
             </DialogTitle>
             <DialogDescription>
-              เลือกระบบโมเดล AI สำหรับประมวลผลคำสั่งในหน้า AI Agent
+              {t.aiSettingsPageDesc}
             </DialogDescription>
           </DialogHeader>
 
@@ -704,9 +704,9 @@ Strict rule: Respond with a valid JSON object matching:
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="gemini">Google Gemini (คลาวด์แนะนำ - แม่นยำและเร็ว)</SelectItem>
-                  <SelectItem value="ollama">Ollama (Local LLM บนเครื่อง)</SelectItem>
-                  <SelectItem value="lmstudio">LM Studio (Local LLM บนเครื่อง)</SelectItem>
+                  <SelectItem value="gemini">{t.aiGeminiPage}</SelectItem>
+                  <SelectItem value="ollama">{t.agentOllama}</SelectItem>
+                  <SelectItem value="lmstudio">{t.agentLmStudio}</SelectItem>
                   <SelectItem value="openai">OpenAI (GPT-4o mini)</SelectItem>
                   <SelectItem value="custom">Custom Endpoint (vLLM / LocalAI)</SelectItem>
                 </SelectContent>
@@ -744,7 +744,7 @@ Strict rule: Respond with a valid JSON object matching:
               <Label htmlFor="model">Model Name</Label>
               <Input
                 id="model"
-                placeholder="gemini-1.5-flash หรือ llama3.2"
+                placeholder={t.agentModelPlaceholder}
                 value={settings.model}
                 onChange={(e) => setSettings({ ...settings, model: e.target.value })}
                 className="font-mono text-xs h-9"
@@ -754,17 +754,17 @@ Strict rule: Respond with a valid JSON object matching:
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setSettingsOpen(false)}>
-              ยกเลิก
+              {t.cancel}
             </Button>
             <Button
               size="sm"
               onClick={() => {
                 saveAISettings(settings);
                 setSettingsOpen(false);
-                toast.success("บันทึกการตั้งค่า AI สำเร็จ");
+                toast.success(t.agentSettingsSaved);
               }}
             >
-              บันทึกการตั้งค่า
+              {t.agentSaveSettings}
             </Button>
           </div>
         </DialogContent>

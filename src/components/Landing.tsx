@@ -51,7 +51,7 @@ export const Landing = () => {
               variant="outline"
               className="gap-2 text-base h-14 px-8 rounded-full hover:scale-105 transition-transform"
             >
-              <Building2 className="w-5 h-5 text-primary" /> ลงทะเบียนสตูดิโอใหม่
+              <Building2 className="w-5 h-5 text-primary" /> {t.registerStudio}
             </Button>
           }
         />

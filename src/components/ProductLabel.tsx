@@ -1,5 +1,7 @@
 import { QRCodeSVG } from "qrcode.react";
 import type { Sku } from "./SkuDialog";
+import { useLang } from "@/hooks/useLang";
+import { displayItemName, displayItemSubtitle, displayPlain } from "@/lib/uiText";
 
 const DEPT_LABEL: Record<string, string> = {
   art: "Art",
@@ -18,13 +20,16 @@ interface Props {
 }
 
 export function ProductLabel({ sku, className = "" }: Props) {
+  const { lang } = useLang();
+  const itemName = displayItemName(sku, lang);
+  const itemSubtitle = displayItemSubtitle(sku, lang);
   const dept = DEPT_LABEL[sku.department] ?? sku.department.toUpperCase();
-  const categoryLine = [dept, sku.category].filter(Boolean).join(" · ");
+  const categoryLine = [dept, displayPlain(sku.category, lang)].filter(Boolean).join(" · ");
 
   // Footer: show LOC and BOX labels with their values, then any extra notes, all on one clipped line.
   const footerParts = [
-    `LOC  ${sku.location ? clip(sku.location, 14) : "—"}`,
-    `BOX  ${sku.notes_th ? clip(sku.notes_th, 20) : "—"}`,
+    `LOC  ${displayPlain(sku.location, lang) ? clip(displayPlain(sku.location, lang), 14) : "—"}`,
+    `BOX  ${displayPlain(lang === "en" ? (sku.notes_en || sku.notes_th) : sku.notes_th, lang) ? clip(displayPlain(lang === "en" ? (sku.notes_en || sku.notes_th) : sku.notes_th, lang), 20) : "—"}`,
   ];
   const footerLine = footerParts.join("   ");
 
@@ -60,11 +65,11 @@ export function ProductLabel({ sku, className = "" }: Props) {
       {/* ── Name ─────────────────────────────────────────────── */}
       <div className="text-center space-y-0.5">
         <p className="text-base font-semibold leading-snug text-gray-800 font-th">
-          {sku.name_th}
+          {itemName}
         </p>
-        {sku.name_en && sku.name_en !== sku.name_th && (
+        {itemSubtitle && (
           <p className="text-sm leading-snug text-gray-500 font-th">
-            {sku.name_en}
+            {itemSubtitle}
           </p>
         )}
       </div>
@@ -89,16 +94,16 @@ export const DEMO_SKU: Sku = {
   id: "demo-001",
   department: "art",
   sku_code: "CLK-MOD-PLT-BLU-M-CLK008",
-  name_th: "นาฬิกา ตั้งโต๊ะ สีน้ำเงิน",
+  name_th: "Blue desk clock",
   name_en: "Blue Desk Clock",
-  category: "อุปกรณ์อิเล็กทรอนิกส์",
-  location: "ใต้ชั้น A3",
+  category: "Electronics",
+  location: "Under shelf A3",
   quantity: 1,
-  unit: "ชิ้น",
+  unit: "pcs",
   min_stock: 1,
   image_url: null,
   image_urls: null,
-  notes_th: "อุปกรณ์อิเล็กทรอนิกส์&นาฬิกา",
+  notes_th: "Electronics and clock",
   notes_en: null,
   color: "Blue",
   special_features: null,

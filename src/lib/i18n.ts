@@ -1,3 +1,5 @@
+import { messages } from "./i18nMessages";
+
 export type Lang = "th" | "en";
 
 export const translations = {
@@ -247,6 +249,7 @@ export const translations = {
     cannotRemoveLastRole: "ไม่สามารถลบ role สุดท้ายได้",
     grantedAccess: (d: string) => `ให้สิทธิ์ดู ${d} แล้ว`,
     revokedAccess: (d: string) => `ถอนสิทธิ์ ${d} แล้ว`,
+    ...messages.th,
   },
 
   en: {
@@ -495,6 +498,7 @@ export const translations = {
     cannotRemoveLastRole: "Cannot remove last role",
     grantedAccess: (d: string) => `${d} access granted`,
     revokedAccess: (d: string) => `${d} access revoked`,
+    ...messages.en,
   },
 } as const;
 

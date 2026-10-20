@@ -147,7 +147,7 @@ export const MultiImageUpload = ({ values, onChange, max = 5 }: Props) => {
         <div className="absolute inset-0 z-20 rounded-lg bg-primary/10 border-2 border-dashed border-primary flex flex-col items-center justify-center gap-2 pointer-events-none">
           <CloudUpload className="w-8 h-8 text-primary animate-bounce" />
           <p className="text-sm font-medium text-primary">
-            {lang === "th" ? "วางรูปที่นี่" : "Release to upload"}
+            {t.dropHere}
           </p>
         </div>
       )}
@@ -166,9 +166,7 @@ export const MultiImageUpload = ({ values, onChange, max = 5 }: Props) => {
           <CloudUpload className={cn("w-9 h-9", isDragActive ? "text-primary" : "text-muted-foreground/50")} />
           <div className="text-center space-y-1">
             <p className="text-sm font-medium text-foreground/80">
-              {isDragActive
-                ? (lang === "th" ? "วางรูปที่นี่" : "Drop images here")
-                : (lang === "th" ? "ลากรูปมาวางที่นี่ หรือคลิกเพื่อเลือก" : "Drop images here, or click to browse")}
+              {isDragActive ? t.dropImages : t.dropOrClick}
             </p>
             <p className="text-xs text-muted-foreground">{t.autoCompress} · {t.maxImages(max)}</p>
           </div>
@@ -304,9 +302,7 @@ export const MultiImageUpload = ({ values, onChange, max = 5 }: Props) => {
           {/* Drop-more hint when canAdd */}
           {canAdd && (
             <p className="text-xs text-muted-foreground/60">
-              {lang === "th"
-                ? `ลากรูปมาวางเพื่อเพิ่ม (เหลือ ${max - values.length} รูป)`
-                : `Drop images to add more (${max - values.length} remaining)`}
+              {t.dropMore(max - values.length)}
             </p>
           )}
         </div>

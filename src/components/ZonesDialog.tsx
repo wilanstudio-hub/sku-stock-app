@@ -8,6 +8,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { MultiImageUpload } from "./MultiImageUpload";
 import { toast } from "sonner";
 import { Trash2, Plus, MapPin } from "lucide-react";
+import { useLang } from "@/hooks/useLang";
+import { isDemoMode } from "@/lib/demo/mode";
+import { DEMO_ZONES } from "@/lib/demo/catalog";
+import { displayZoneName } from "@/lib/uiText";
 
 interface Zone {
   id: string;
@@ -25,6 +29,7 @@ interface Props {
 
 export const ZonesDialog = ({ open, onOpenChange }: Props) => {
   const { roles } = useAuth();
+  const { t, lang } = useLang();
   const isAdmin = roles.includes("admin");
 
   const [zones, setZones] = useState<Zone[]>([]);
@@ -35,6 +40,11 @@ export const ZonesDialog = ({ open, onOpenChange }: Props) => {
 
   const load = async () => {
     setLoading(true);
+    if (isDemoMode()) {
+      setZones(DEMO_ZONES);
+      setLoading(false);
+      return;
+    }
     const { data, error } = await supabase.from("zones").select("*").order("order_index");
     if (error) toast.error(error.message);
     else setZones((data ?? []) as Zone[]);
@@ -53,7 +63,7 @@ export const ZonesDialog = ({ open, onOpenChange }: Props) => {
 
   const handleAdd = async () => {
     if (!newKey.trim() || !newNameTh.trim()) {
-      toast.error("กรุณากรอกรหัสโซนและชื่อโซนให้ครบถ้วน");
+      toast.error(t.zoneLoadError);
       return;
     }
     const { error } = await supabase.from("zones").insert({
@@ -62,18 +72,18 @@ export const ZonesDialog = ({ open, onOpenChange }: Props) => {
       order_index: zones.length + 1,
     });
     if (error) { toast.error(error.message); return; }
-    toast.success("เพิ่มโซนสำเร็จ");
+    toast.success(t.zoneAdded);
     setNewKey("");
     setNewNameTh("");
     load();
   };
 
   const handleDelete = async (zone: Zone) => {
-    if (!confirm(`ต้องการลบโซน "${zone.name_th}" ใช่หรือไม่?`)) return;
+    if (!confirm(t.zoneDeleteConfirm(displayZoneName(zone, lang) || zone.key))) return;
     const { error } = await supabase.from("zones").delete().eq("id", zone.id);
     if (error) toast.error(error.message);
     else {
-      toast.success("ลบโซนสำเร็จ");
+      toast.success(t.zoneDeleted);
       load();
     }
   };
@@ -83,25 +93,25 @@ export const ZonesDialog = ({ open, onOpenChange }: Props) => {
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <MapPin className="w-4 h-4" /> รูปพื้นที่เก็บของ (Storage Zones)
+            <MapPin className="w-4 h-4" /> {t.zoneDialogTitle}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
           {loading ? (
-            <p className="text-sm text-muted-foreground">กำลังโหลด...</p>
+            <p className="text-sm text-muted-foreground">{t.loading}</p>
           ) : zones.length === 0 ? (
-            <p className="text-sm text-muted-foreground">ยังไม่มีโซนที่บันทึกไว้</p>
+            <p className="text-sm text-muted-foreground">{t.zoneEmpty}</p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {zones.map((z) => (
                 <div key={z.id} className="border rounded-lg p-2 space-y-2 bg-card">
                   <div className="flex items-start justify-between gap-1">
                     <div className="min-w-0">
-                      <div className="font-semibold text-sm truncate" title={z.name_th}>
-                        {z.key} · {z.name_th}
+                      <div className="font-semibold text-sm truncate" title={displayZoneName(z, lang) || z.key}>
+                        {z.key} · {displayZoneName(z, lang) || z.key}
                       </div>
-                      {z.name_en && (
+                      {lang === "th" && z.name_en && (
                         <div className="text-xs text-muted-foreground truncate">{z.name_en}</div>
                       )}
                     </div>
@@ -111,7 +121,7 @@ export const ZonesDialog = ({ open, onOpenChange }: Props) => {
                         variant="ghost"
                         className="h-6 w-6 text-destructive shrink-0"
                         onClick={() => handleDelete(z)}
-                        title="ลบโซน"
+                        title={t.zoneDeleteTitle}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
@@ -127,12 +137,12 @@ export const ZonesDialog = ({ open, onOpenChange }: Props) => {
                   ) : z.image_url ? (
                     <img
                       src={z.image_url}
-                      alt={z.name_th}
+                      alt={displayZoneName(z, lang) || z.key}
                       className="w-full aspect-square object-cover rounded-md border border-border"
                     />
                   ) : (
                     <div className="w-full aspect-square rounded-md border border-dashed border-border flex items-center justify-center text-muted-foreground text-xs">
-                      ยังไม่มีรูป
+                      {t.zoneNoPhoto}
                     </div>
                   )}
                 </div>
@@ -144,20 +154,20 @@ export const ZonesDialog = ({ open, onOpenChange }: Props) => {
             <>
               <hr />
               <div className="space-y-3 pt-1">
-                <h4 className="font-semibold text-sm">เพิ่มโซนใหม่</h4>
+                <h4 className="font-semibold text-sm">{t.zoneAddTitle}</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>รหัสโซน (Key)</Label>
+                    <Label>{t.zoneKeyLabel}</Label>
                     <Input value={newKey} onChange={(e) => setNewKey(e.target.value.toUpperCase())} placeholder="e.g. N" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>ชื่อโซน</Label>
+                    <Label>{t.zoneNameLabel}</Label>
                     <Input value={newNameTh} onChange={(e) => setNewNameTh(e.target.value)} placeholder="e.g. ZONE BOX ART 6" />
                   </div>
                 </div>
                 <div className="flex justify-end">
                   <Button onClick={handleAdd} className="gap-2">
-                    <Plus className="w-4 h-4" /> เพิ่มโซน
+                    <Plus className="w-4 h-4" /> {t.zoneAddBtn}
                   </Button>
                 </div>
               </div>

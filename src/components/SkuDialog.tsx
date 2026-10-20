@@ -120,7 +120,7 @@ const empty = (dept: "art" | "wd" | "equipment"): Sku => ({
 });
 
 const prefix3 = (s: string) =>
-  (s || "").replace(/[^a-zA-Z0-9ก-๙]/g, "").slice(0, 3).toUpperCase() || "XXX";
+  (s || "").replace(/[^a-zA-Z0-9\u0E01-\u0E59]/g, "").slice(0, 3).toUpperCase() || "XXX";
 
 const buildSkuCode = async (
   dept: "art" | "wd" | "equipment",
@@ -241,14 +241,14 @@ export const SkuDialog = ({ open, onOpenChange, department, initial, onSaved }: 
                     <SelectTrigger><SelectValue placeholder={t.selectCategory} /></SelectTrigger>
                     <SelectContent>
                       {options.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      <SelectItem value={OTHER_SENTINEL}>{lang === "th" ? "อื่นๆ (พิมพ์เอง)" : "Other (custom)"}</SelectItem>
+                      <SelectItem value={OTHER_SENTINEL}>{t.categoryOther}</SelectItem>
                     </SelectContent>
                   </Select>
                   {(selectValue === OTHER_SENTINEL || isOther) && (
                     <input
                       ref={customRef}
                       className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 font-th"
-                      placeholder={lang === "th" ? "พิมพ์ชื่อหมวดหมู่..." : "Type category name…"}
+                      placeholder={t.categoryCustomPlaceholder}
                       value={isOther ? current : customCategory}
                       onChange={(e) => {
                         setCustomCategory(e.target.value);

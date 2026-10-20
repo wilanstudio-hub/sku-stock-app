@@ -202,7 +202,7 @@ const Auth = () => {
                     <SelectContent>
                       <SelectItem value="art">Art</SelectItem>
                       <SelectItem value="wd">WD</SelectItem>
-                      <SelectItem value="both">{lang === "th" ? "ทั้งสอง" : "Both"}</SelectItem>
+                      <SelectItem value="both">{t.bothDepts}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

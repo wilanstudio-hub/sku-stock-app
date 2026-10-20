@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import { AppLogo } from "@/components/AppLogo";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
+import { useLang } from "@/hooks/useLang";
 import { getPageContext } from "@/lib/ai/pageContext";
 import {
   ChatMessage,
@@ -53,25 +54,26 @@ import {
   ToolCall,
 } from "@/lib/ai/inventoryAgentTools";
 
-const QUICK_PROMPTS = [
-  { label: "🔍 ค้นหากล้องว่าง", query: "มีกล้องอะไรว่างในคลังบ้าง" },
-  { label: "📤 ของที่ถูกเบิกออก", query: "สรุปรายการอุปกรณ์ที่กำลังถูกเบิกออกอยู่ตอนนี้" },
-  { label: "🎬 แนะนำ Kit โฆษณา", query: "แนะนำชุดอุปกรณ์สำหรับถ่ายทำโฆษณา (Commercial Shoot)" },
-  { label: "📊 สรุปยอดสต๊อก", query: "สรุปภาพรวมจำนวนสต๊อกทั้งหมดในระบบ" },
-];
-
 export const GlobalAgentWidget: React.FC = () => {
   const location = useLocation();
   const { tenant } = useTenant();
   const { user, roles } = useAuth();
+  const { t, lang } = useLang();
+  const stamp = () => new Date().toLocaleTimeString(lang === "th" ? "th-TH" : "en-GB", { hour: "2-digit", minute: "2-digit" });
+  const quickPrompts = [
+    { label: t.aiQuickCameras, query: t.aiQuickCamerasQ },
+    { label: t.aiQuickOut, query: t.aiQuickOutQ },
+    { label: t.aiQuickKitAd, query: t.aiQuickKitAdQ },
+    { label: t.aiQuickSummary, query: t.aiQuickSummaryQ },
+  ];
 
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
       role: "assistant",
-      content: `👋 สวัสดีครับ! ผมคือ **Ctrl+ Inventory Agent** ผู้ช่วยจัดการสต๊อกและอุปกรณ์กองถ่ายสำหรับ **${tenant?.name || "สตูดิโอ"}**\n\nพิมพ์ถามสต๊อก, ตรวจสอบของว่าง, ทำเรื่องเบิก-คืน หรือให้แนะนำ Kit อุปกรณ์กองถ่ายได้เลยครับ!`,
-      timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+      content: t.agentWelcome(tenant?.name || t.agentStudioFallback),
+      timestamp: stamp(),
     },
   ]);
 
@@ -110,7 +112,7 @@ export const GlobalAgentWidget: React.FC = () => {
       id: `user-${Date.now()}`,
       role: "user",
       content: text,
-      timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+      timestamp: stamp(),
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -139,8 +141,8 @@ export const GlobalAgentWidget: React.FC = () => {
           const confirmMsg: ChatMessage = {
             id: confirmMsgId,
             role: "assistant",
-            content: `⚠️ **คำขอยืนยันการเปลี่ยนแปลงข้อมูล**`,
-            timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+            content: t.agentConfirmTitle,
+            timestamp: stamp(),
             toolCall: res.toolCall,
             isMutating: true,
           };
@@ -157,7 +159,7 @@ export const GlobalAgentWidget: React.FC = () => {
             id: `reply-${Date.now()}`,
             role: "assistant",
             content: execRes.result,
-            timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+            timestamp: stamp(),
           };
           setMessages((prev) => [...prev, replyMsg]);
         }
@@ -166,7 +168,7 @@ export const GlobalAgentWidget: React.FC = () => {
           id: `reply-${Date.now()}`,
           role: "assistant",
           content: res.reply,
-          timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+          timestamp: stamp(),
         };
         setMessages((prev) => [...prev, replyMsg]);
       }
@@ -174,8 +176,8 @@ export const GlobalAgentWidget: React.FC = () => {
       const errorMsg: ChatMessage = {
         id: `err-${Date.now()}`,
         role: "assistant",
-        content: `❌ **เกิดข้อผิดพลาดในการเชื่อมต่อ AI:** ${err?.message || "ไม่สามารถติดต่อ AI Provider ได้"}\n\n💡 *กรุณาตรวจสอบ API Key หรือ Base URL โดยกดปุ่มเฟืองมุมขวาบน*`,
-        timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+        content: t.agentConnectError(err?.message || t.agentGenericError),
+        timestamp: stamp(),
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
@@ -196,7 +198,7 @@ export const GlobalAgentWidget: React.FC = () => {
         id: `reply-${Date.now()}`,
         role: "assistant",
         content: execRes.result,
-        timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+        timestamp: stamp(),
       };
       setMessages((prev) => [...prev, replyMsg]);
     } catch (err: any) {
@@ -211,8 +213,8 @@ export const GlobalAgentWidget: React.FC = () => {
     const cancelMsg: ChatMessage = {
       id: `cancel-${Date.now()}`,
       role: "assistant",
-      content: "🚫 ยกเลิกคำสั่งเรียบร้อยแล้ว ข้อมูลในระบบไม่มีการเปลี่ยนแปลงครับ",
-      timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+      content: t.agentCancelled,
+      timestamp: stamp(),
     };
     setMessages((prev) => [...prev, cancelMsg]);
   };
@@ -222,8 +224,8 @@ export const GlobalAgentWidget: React.FC = () => {
       {
         id: "welcome",
         role: "assistant",
-        content: `👋 เริ่มต้นการสนทนาใหม่กับ **Ctrl+ Inventory Agent** สำหรับ **${tenant?.name || "สตูดิโอ"}**`,
-        timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+        content: t.agentNewChat(tenant?.name || t.agentStudioFallback),
+        timestamp: stamp(),
       },
     ]);
     setPendingConfirmation(null);
@@ -232,7 +234,7 @@ export const GlobalAgentWidget: React.FC = () => {
   const handleSaveSettings = () => {
     saveAISettings(settings);
     setSettingsOpen(false);
-    toast.success("บันทึกการตั้งค่า AI สำเร็จ");
+    toast.success(t.agentSettingsSaved);
   };
 
   // Format simple markdown into clean HTML representation
@@ -278,7 +280,7 @@ export const GlobalAgentWidget: React.FC = () => {
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-5 right-5 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-primary text-primary-foreground shadow-2xl hover:scale-105 transition-all duration-200 border border-primary-foreground/20 group"
-          title="เปิด Ctrl+ Inventory Agent"
+          title={t.agentOpen}
         >
           <div className="relative flex items-center justify-center">
             <AppLogo theme="dark" variant="icon" className="w-5 h-5" />
@@ -314,7 +316,7 @@ export const GlobalAgentWidget: React.FC = () => {
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-foreground"
                 onClick={handleClearHistory}
-                title="ล้างประวัติแชต"
+                title={t.agentClear}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </Button>
@@ -323,7 +325,7 @@ export const GlobalAgentWidget: React.FC = () => {
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-foreground"
                 onClick={() => setSettingsOpen(true)}
-                title="ตั้งค่าโมเดล AI"
+                title={t.agentSettings}
               >
                 <Settings className="w-3.5 h-3.5" />
               </Button>
@@ -332,7 +334,7 @@ export const GlobalAgentWidget: React.FC = () => {
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-foreground"
                 onClick={() => setIsOpen(false)}
-                title="ปิดหน้าต่าง"
+                title={t.agentClose}
               >
                 <X className="w-4 h-4" />
               </Button>
@@ -362,7 +364,7 @@ export const GlobalAgentWidget: React.FC = () => {
                       <div className="mt-2.5 p-3 rounded-xl bg-card border border-amber-500/30 text-card-foreground shadow-sm space-y-2">
                         <div className="flex items-center gap-1.5 text-amber-600 font-semibold text-xs">
                           <AlertTriangle className="w-4 h-4" />
-                          <span>โปรดยืนยันการทำรายการ:</span>
+                          <span>{t.agentConfirmPrompt}</span>
                         </div>
                         <div className="font-mono text-[11px] bg-muted/60 p-2 rounded border">
                           <div className="text-primary font-bold">Tool: {m.toolCall.tool}</div>
@@ -379,7 +381,7 @@ export const GlobalAgentWidget: React.FC = () => {
                             onClick={() => handleConfirmAction(m.toolCall!)}
                             disabled={loading}
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> ยืนยันดำเนินการ
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> {t.agentConfirmDo}
                           </Button>
                           <Button
                             size="sm"
@@ -388,7 +390,7 @@ export const GlobalAgentWidget: React.FC = () => {
                             onClick={handleCancelAction}
                             disabled={loading}
                           >
-                            ยกเลิก
+                            {t.cancel}
                           </Button>
                         </div>
                       </div>
@@ -404,7 +406,7 @@ export const GlobalAgentWidget: React.FC = () => {
             {loading && (
               <div className="flex items-center gap-2 text-muted-foreground text-xs p-2">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span>Ctrl+ Inventory Agent กำลังคิดและประมวลผล...</span>
+                <span>{t.agentThinking}</span>
               </div>
             )}
 
@@ -413,7 +415,7 @@ export const GlobalAgentWidget: React.FC = () => {
 
           {/* Quick Prompts */}
           <div className="px-3 py-1.5 border-t bg-muted/20 flex gap-1.5 overflow-x-auto no-scrollbar">
-            {QUICK_PROMPTS.map((qp) => (
+            {quickPrompts.map((qp) => (
               <button
                 key={qp.label}
                 onClick={() => handleSend(qp.query)}
@@ -438,7 +440,7 @@ export const GlobalAgentWidget: React.FC = () => {
                 ref={inputRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="ถามสต๊อก, ค้นหาของ, หรือสั่งงาน AI..."
+                placeholder={t.agentPlaceholder}
                 className="text-xs font-th h-9 rounded-full px-3.5"
                 disabled={loading}
               />
@@ -461,10 +463,10 @@ export const GlobalAgentWidget: React.FC = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
               <Settings className="w-5 h-5 text-primary" />
-              การตั้งค่า AI Provider
+              {t.agentSettingsTitle}
             </DialogTitle>
             <DialogDescription>
-              เลือกระบบโมเดล AI ที่ต้องการใช้งานสำหรับ Ctrl+ Inventory Agent
+              {t.agentSettingsDesc}
             </DialogDescription>
           </DialogHeader>
 
@@ -484,9 +486,9 @@ export const GlobalAgentWidget: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="gemini">Google Gemini (คลาวด์แนะนำ - เร็วและแม่นยำ)</SelectItem>
-                  <SelectItem value="ollama">Ollama (Local LLM บนเครื่อง)</SelectItem>
-                  <SelectItem value="lmstudio">LM Studio (Local LLM บนเครื่อง)</SelectItem>
+                  <SelectItem value="gemini">{t.agentGemini}</SelectItem>
+                  <SelectItem value="ollama">{t.agentOllama}</SelectItem>
+                  <SelectItem value="lmstudio">{t.agentLmStudio}</SelectItem>
                   <SelectItem value="openai">OpenAI (GPT-4o mini)</SelectItem>
                   <SelectItem value="custom">Custom Endpoint (vLLM / LocalAI)</SelectItem>
                 </SelectContent>
@@ -505,7 +507,9 @@ export const GlobalAgentWidget: React.FC = () => {
                   className="font-mono text-xs h-9"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  รับฟรีได้ที่ <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" className="text-primary underline">aistudio.google.com</a> (เก็บใน Browser ของคุณเท่านั้น)
+                  {t.agentKeyHint.split("aistudio.google.com")[0]}
+                  <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" className="text-primary underline">aistudio.google.com</a>
+                  {t.agentKeyHint.split("aistudio.google.com")[1]}
                 </p>
               </div>
             )}
@@ -527,7 +531,7 @@ export const GlobalAgentWidget: React.FC = () => {
               <Label htmlFor="model">Model Name</Label>
               <Input
                 id="model"
-                placeholder="gemini-1.5-flash หรือ llama3.2"
+                placeholder={t.agentModelPlaceholder}
                 value={settings.model}
                 onChange={(e) => setSettings({ ...settings, model: e.target.value })}
                 className="font-mono text-xs h-9"
@@ -537,10 +541,10 @@ export const GlobalAgentWidget: React.FC = () => {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setSettingsOpen(false)}>
-              ยกเลิก
+              {t.cancel}
             </Button>
             <Button size="sm" onClick={handleSaveSettings}>
-              บันทึกการตั้งค่า
+              {t.agentSaveSettings}
             </Button>
           </div>
         </DialogContent>

@@ -13,6 +13,7 @@ import { Check, Sparkles, CreditCard, Shield, Zap, Building2, Loader2 } from "lu
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Company } from "@/contexts/TenantContext";
+import { useLang } from "@/hooks/useLang";
 
 export interface PlanConfig {
   id: string;
@@ -26,27 +27,17 @@ export interface PlanConfig {
 export const SAAS_PLANS: PlanConfig[] = [
   {
     id: "free",
-    name: "Starter / ทดลองใช้",
+    name: "planStarter",
     priceBaht: 0,
     seatLimit: 3,
-    features: [
-      "ใช้งานได้สูงสุด 3 สมาชิก",
-      "ระบบสต๊อกพื้นฐาน & QR Scan",
-      "ส่งออก PDF Catalog",
-      "ซิงก์ Google Sheets 1 คลัง",
-    ],
+    features: ["planFeat1", "planFeat2", "planFeat3", "planFeat4"],
   },
   {
     id: "solo",
     name: "Solo Production",
     priceBaht: 550,
     seatLimit: 1,
-    features: [
-      "1 ผู้ดูแลระบบ (Single Admin)",
-      "ไม่จำกัดจำนวนรายการ SKU",
-      "Google Sheets Real-time Sync",
-      "Ctrl+ Inventory AI Agent พื้นฐาน",
-    ],
+    features: ["planFeat5", "planFeat6", "Google Sheets Real-time Sync", "planFeat7"],
   },
   {
     id: "team",
@@ -54,26 +45,14 @@ export const SAAS_PLANS: PlanConfig[] = [
     priceBaht: 2500,
     seatLimit: 8,
     popular: true,
-    features: [
-      "สูงสุด 8 สมาชิกพร้อมกัน",
-      "รองรับแยกแผนก Art, WD, Equipment อิสระ",
-      "Ctrl+ Inventory AI Agent เต็มรูปแบบ",
-      "ประวัติการเบิก-คืน & Timeline ละเอียด",
-      "QR Batch Sheets & Label Generator",
-    ],
+    features: ["planFeat8", "planFeat9", "planFeat10", "planFeat11", "QR Batch Sheets & Label Generator"],
   },
   {
     id: "studio",
     name: "Studio Pro",
     priceBaht: 5000,
     seatLimit: 20,
-    features: [
-      "สูงสุด 20 สมาชิกในสตูดิโอ",
-      "จัดการหลายคลังสินค้าพร้อมกัน",
-      "AI Inventory Audit & Auto-PM Follow-up",
-      "Subdomain เฉพาะสตูดิโอระดับ Enterprise",
-      "ระบบความปลอดภัย Row-Level Security สูงสุด",
-    ],
+    features: ["planFeat12", "planFeat13", "AI Inventory Audit & Auto-PM Follow-up", "planFeat14", "planFeat15"],
   },
 ];
 
@@ -90,12 +69,17 @@ export const BillingPlansDialog: React.FC<BillingPlansDialogProps> = ({
   company,
   onPlanUpdated,
 }) => {
+  const { t } = useLang();
+  const text = (key: string) => {
+    const value = (t as unknown as Record<string, unknown>)[key];
+    return typeof value === "string" ? value : key;
+  };
   const [submittingPlan, setSubmittingPlan] = useState<string | null>(null);
 
   const handleSelectPlan = async (plan: PlanConfig) => {
     if (!company) return;
     if (company.billing_plan === plan.id) {
-      toast.info(`สตูดิโอของคุณใช้งานแผน ${plan.name} อยู่แล้ว`);
+      toast.info(t.planAlready(text(plan.name)));
       return;
     }
 
@@ -119,11 +103,11 @@ export const BillingPlansDialog: React.FC<BillingPlansDialogProps> = ({
         throw new Error("Billing service did not confirm the plan change");
       }
 
-      toast.success(`อัปเกรดเป็นแผน "${plan.name}" สำเร็จ! (โควต้า ${plan.seatLimit} ที่นั่ง)`);
+      toast.success(t.planUpgraded(text(plan.name), plan.seatLimit));
       onPlanUpdated();
       onOpenChange(false);
     } catch (err: any) {
-      toast.error("เกิดข้อผิดพลาดในการเปลี่ยนแผน: " + (err?.message || String(err)));
+      toast.error(t.planChangeError(err?.message || String(err)));
     } finally {
       setSubmittingPlan(null);
     }
@@ -137,10 +121,10 @@ export const BillingPlansDialog: React.FC<BillingPlansDialogProps> = ({
         <DialogHeader>
           <div className="flex items-center gap-2 mb-1 text-primary">
             <CreditCard className="w-5 h-5" />
-            <DialogTitle className="text-xl font-bold">แผนการใช้งานและการสมัครสมาชิก</DialogTitle>
+            <DialogTitle className="text-xl font-bold">{t.plansTitle}</DialogTitle>
           </div>
           <DialogDescription>
-            เลือกแผนที่เหมาะสมสำหรับสตูดิโอ <strong>{company?.name || "ของคุณ"}</strong> เพื่อขยายโควต้าสมาชิกและฟีเจอร์ระดับโปร
+            {t.plansDesc} <strong>{company?.name || t.plansYours}</strong> {t.plansDescTail}
           </DialogDescription>
         </DialogHeader>
 
@@ -160,27 +144,27 @@ export const BillingPlansDialog: React.FC<BillingPlansDialogProps> = ({
               >
                 {plan.popular && !isCurrent && (
                   <Badge className="absolute -top-2.5 right-4 bg-orange-500 hover:bg-orange-600 text-white text-[10px] uppercase font-bold tracking-wider">
-                    ยอดนิยม (Popular)
+                    {t.popular}
                   </Badge>
                 )}
                 {isCurrent && (
                   <Badge className="absolute -top-2.5 right-4 bg-primary text-primary-foreground text-[10px] uppercase font-bold tracking-wider">
-                    แผนปัจจุบัน
+                    {t.currentPlan}
                   </Badge>
                 )}
 
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base font-bold flex items-center justify-between">
-                    <span>{plan.name}</span>
+                    <span>{text(plan.name)}</span>
                   </CardTitle>
                   <div className="flex items-baseline gap-1 mt-2">
                     <span className="text-2xl font-extrabold text-foreground">
-                      {plan.priceBaht === 0 ? "ฟรี" : `฿${plan.priceBaht.toLocaleString()}`}
+                      {plan.priceBaht === 0 ? t.free : t.priceAmount(plan.priceBaht)}
                     </span>
-                    <span className="text-xs text-muted-foreground">/เดือน</span>
+                    <span className="text-xs text-muted-foreground">{t.perMonth}</span>
                   </div>
                   <p className="text-xs text-primary font-medium mt-1">
-                    👥 โควต้าสมาชิก: {plan.seatLimit} ที่นั่ง (Seats)
+                    {t.seatQuota(plan.seatLimit)}
                   </p>
                 </CardHeader>
 
@@ -189,7 +173,7 @@ export const BillingPlansDialog: React.FC<BillingPlansDialogProps> = ({
                     {plan.features.map((f, i) => (
                       <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
                         <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>{f}</span>
+                        <span>{text(f)}</span>
                       </div>
                     ))}
                   </div>
@@ -203,13 +187,13 @@ export const BillingPlansDialog: React.FC<BillingPlansDialogProps> = ({
                   >
                     {submittingPlan === plan.id ? (
                       <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> กำลังดำเนินการ...
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> {t.processing}
                       </>
                     ) : isCurrent ? (
-                      "ใช้งานอยู่"
+                      t.inUse
                     ) : (
                       <>
-                        <Zap className="w-3.5 h-3.5" /> เลือกแผนนี้
+                        <Zap className="w-3.5 h-3.5" /> {t.choosePlan}
                       </>
                     )}
                   </Button>

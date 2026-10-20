@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 import { translations, type Lang } from "@/lib/i18n";
+import { readLang } from "@/lib/uiText";
 
 export type TranslationDict = typeof translations[Lang];
 
@@ -13,7 +14,12 @@ const Ctx = createContext<LangCtx | undefined>(undefined);
 
 export const LangProvider = ({ children }: { children: ReactNode }) => {
   const [lang, setLangState] = useState<Lang>(() => {
-    try { return (localStorage.getItem("lang") as Lang) ?? "th"; } catch { return "th"; }
+    const initial = readLang();
+    try {
+      const q = new URLSearchParams(window.location.search).get("lang");
+      if (q === "en" || q === "th") localStorage.setItem("lang", q);
+    } catch { /* ignore */ }
+    return initial;
   });
 
   const setLang = (l: Lang) => {

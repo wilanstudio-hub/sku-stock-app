@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ShieldCheck, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
+import { useLang } from "@/hooks/useLang";
 
 type AppRole = "admin" | "art" | "wd" | "equipment" | "viewer";
 const ALL_ROLES: AppRole[] = ["admin", "art", "wd", "equipment", "viewer"];
@@ -13,6 +14,7 @@ type Profile = { user_id: string; display_name: string | null; department: strin
 type RoleRow = { id: string; user_id: string; role: AppRole };
 
 export const AdminPanel = () => {
+  const { t } = useLang();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,13 +37,13 @@ export const AdminPanel = () => {
   const addRole = async (uid: string, role: AppRole) => {
     const { error } = await supabase.from("user_roles").insert({ user_id: uid, role });
     if (error) toast.error(error.message);
-    else { toast.success(`เพิ่ม ${role} แล้ว / Added ${role}`); load(); }
+    else { toast.success(t.adminAdded(role)); load(); }
   };
 
   const removeRole = async (id: string) => {
     const { error } = await supabase.from("user_roles").delete().eq("id", id);
     if (error) toast.error(error.message);
-    else { toast.success("ลบแล้ว / Removed"); load(); }
+    else { toast.success(t.adminRemoved); load(); }
   };
 
   return (
@@ -49,14 +51,14 @@ export const AdminPanel = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <ShieldCheck className="w-5 h-5 text-primary" />
-          จัดการผู้ใช้ / Admin — User Roles
+          {t.adminTitleBi}
         </CardTitle>
       </CardHeader>
       <CardContent>
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : profiles.length === 0 ? (
-          <p className="text-sm text-muted-foreground">ยังไม่มีผู้ใช้ / No users yet.</p>
+          <p className="text-sm text-muted-foreground">{t.adminNoUsers}</p>
         ) : (
           <div className="space-y-3">
             {profiles.map((p) => {
@@ -69,7 +71,7 @@ export const AdminPanel = () => {
                     <p className="text-[11px] text-muted-foreground font-mono truncate max-w-[240px]">{p.user_id}</p>
                   </div>
                   <div className="flex flex-wrap gap-1 flex-1">
-                    {ur.length === 0 && <span className="text-xs text-muted-foreground">ไม่มี role / No roles</span>}
+                    {ur.length === 0 && <span className="text-xs text-muted-foreground">{t.adminNoRoles}</span>}
                     {ur.map((r) => (
                       <Badge key={r.id} variant="secondary" className="gap-1 uppercase text-[10px]">
                         {r.role}

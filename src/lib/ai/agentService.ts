@@ -1,5 +1,6 @@
 import { INVENTORY_AGENT_TOOLS, ToolCall, validateToolCall } from "./inventoryAgentTools";
 import { getPageContext } from "./pageContext";
+import { currentTranslations } from "@/lib/uiText";
 
 export type AIProvider = "gemini" | "ollama" | "lmstudio" | "openai" | "custom";
 
@@ -118,7 +119,7 @@ Choose ONE of the two formats:
 
 2. If you are answering directly or greeting:
 {
-  "reply": "ข้อความคำตอบภาษาไทยของคุณ..."
+  "reply": "${currentTranslations().agentReplyExample}"
 }
 
 [SAFETY & ACCURACY RULES]
@@ -143,7 +144,7 @@ export async function sendAgentMessage(
     if (settings.provider === "gemini") {
       const apiKey = settings.apiKey || "";
       if (!apiKey) {
-        throw new Error("กรุณาระบุ Gemini API Key ในการตั้งค่า AI (กดปุ่มเฟือง)");
+        throw new Error(currentTranslations().geminiKeyMissing);
       }
 
       const contents = messages.map((m) => ({
@@ -241,7 +242,7 @@ export async function sendAgentMessage(
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === "AbortError") {
-      throw new Error("คำขอหมดเวลา (Timeout 25s) กรุณาลองใหม่อีกครั้ง หรือตรวจสอบ Local AI Server");
+      throw new Error(currentTranslations().agentTimeout);
     }
     throw err;
   }
