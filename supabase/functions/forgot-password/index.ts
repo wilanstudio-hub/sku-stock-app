@@ -45,8 +45,8 @@ Deno.serve(async (req) => {
   // Generate recovery link. Return success even if email not found to prevent
   // email enumeration on this internal tool.
   const appUrl = Deno.env.get("APP_URL") || "https://filmflow-inventory.pages.dev";
-  const appName = Deno.env.get("APP_NAME") || "FilmFlow Inventory";
-  const resendFrom = Deno.env.get("RESEND_FROM") || "FilmFlow Inventory <noreply@wilanstudioresend.xyz>";
+  const appName = Deno.env.get("APP_NAME") || "Ctrl+ Inventory";
+  const resendFrom = Deno.env.get("RESEND_FROM") || "Ctrl+ Inventory <noreply@wilanstudioresend.xyz>";
 
   let recoveryLink: string;
   try {
@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
             messages: [
               {
                 type: "text",
-                text: `🔐 รีเซ็ตรหัสผ่าน — Wilan Studio FilmFlow-Inventory\n\nคลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่:\n\n${recoveryLink}\n\n⏱ ลิงก์หมดอายุใน 1 ชั่วโมง`,
+                text: `🔐 รีเซ็ตรหัสผ่าน — Wilan Studio Ctrl+ Inventory\n\nคลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่:\n\n${recoveryLink}\n\n⏱ ลิงก์หมดอายุใน 1 ชั่วโมง`,
               },
             ],
           }),

@@ -244,7 +244,7 @@ describe("E2E Smoke Tests: Core Inventory Flows", () => {
     });
   });
 
-  describe("7. SKU Stock Logo Brand Rules", () => {
+  describe("7. Ctrl+ Inventory Logo Brand Rules", () => {
     const LOGO_ASSETS = {
       dark: {
         full: "/branding/ctrlplus-logo-dark.png",
@@ -279,7 +279,7 @@ describe("E2E Smoke Tests: Core Inventory Flows", () => {
 
       const logCall = {
         tool: "log_quick_transaction",
-        args: { sku_code: "EQ-CAM-001", action_type: "check_out", person_name: "สมชาย" }
+        args: { sku_code: "EQ-CAM-001", action_type: "check_out", person_name: "Somchai" }
       };
       const validLog = validateToolCall(logCall);
       expect(validLog.valid).toBe(true);
@@ -323,10 +323,11 @@ describe("E2E Smoke Tests: Core Inventory Flows", () => {
 
   describe("9. Page Context Routing Hints", () => {
     it("resolves relevant tools and labels for Inventory pages", async () => {
+      localStorage.setItem("lang", "th");
       const { getPageContext } = await import("@/lib/ai/pageContext");
 
       const rootCtx = getPageContext("/");
-      expect(rootCtx.label).toContain("คลังอุปกรณ์");
+      expect(rootCtx.label).toBe(translations.th.pageInventory);
       expect(rootCtx.relevantTools).toContain("search_sku_item");
 
       const adminCtx = getPageContext("/admin");
@@ -334,7 +335,7 @@ describe("E2E Smoke Tests: Core Inventory Flows", () => {
       expect(adminCtx.relevantTools).toContain("trigger_sheet_sync");
 
       const scanCtx = getPageContext("/scan");
-      expect(scanCtx.label).toContain("สแกน QR Code");
+      expect(scanCtx.label).toBe(translations.th.pageScan);
     });
   });
 

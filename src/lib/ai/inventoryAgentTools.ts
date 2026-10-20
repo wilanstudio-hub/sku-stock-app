@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { currentTranslations, displayItemName, displayPlain, displayUnit, readLang } from "@/lib/uiText";
 
 export interface AgentToolParam {
   type: "string" | "number" | "array" | "boolean";
@@ -18,7 +19,7 @@ export const INVENTORY_AGENT_TOOLS: AgentToolDef[] = [
     name: "search_sku_item",
     description: "Search inventory items by name (Thai/English), SKU code, category, or location. Read-only.",
     parameters: {
-      query: { type: "string", description: "Search query or keyword (e.g. 'Sony FX6', 'LENS-001', 'ไฟ Aputure', 'ขาตั้ง')", required: true },
+      query: { type: "string", description: "Search query or keyword (e.g. 'Sony FX6', 'LENS-001', 'Aputure light', 'tripod')", required: true },
       department: { type: "string", description: "Department code (e.g. 'equipment', 'art', 'wd', optional)" },
     },
     isMutating: false,
@@ -35,7 +36,7 @@ export const INVENTORY_AGENT_TOOLS: AgentToolDef[] = [
     name: "recommend_equipment_kit",
     description: "Recommend a standard equipment, lighting, sound, camera kit, props, or wardrobe checklist for film & video production shoots (e.g. TVC, Commercial, MV, Documentary, Night Outdoor, Interview). Read-only.",
     parameters: {
-      shoot_type: { type: "string", description: "Type of shoot (e.g. 'Commercial / โฆษณา', 'Music Video', 'Interview', 'Documentary', 'Studio Talk')", required: true },
+      shoot_type: { type: "string", description: "Type of shoot (e.g. 'Commercial', 'Music Video', 'Interview', 'Documentary', 'Studio Talk')", required: true },
       department: { type: "string", description: "Target department (e.g. 'equipment', 'art', 'wd', optional)" },
     },
     isMutating: false,
@@ -51,10 +52,10 @@ export const INVENTORY_AGENT_TOOLS: AgentToolDef[] = [
   },
   {
     name: "log_quick_transaction",
-    description: "Execute a check-out (ยืม/เบิกออก) or check-in (นำคืน) for a specific SKU code with the borrower's name. Mutates database — requires user confirmation.",
+    description: "Execute a check-out or check-in for a specific SKU code with the borrower's name. Mutates database — requires user confirmation.",
     parameters: {
       sku_code: { type: "string", description: "SKU code of the item (e.g. 'EQ-CAM-001')", required: true },
-      action_type: { type: "string", description: "'check_out' (เบิกออก) or 'check_in' (นำคืน)", required: true },
+      action_type: { type: "string", description: "'check_out' or 'check_in'", required: true },
       person_name: { type: "string", description: "Name of the person borrowing or returning the item", required: true },
     },
     isMutating: true,
@@ -113,13 +114,15 @@ function sanitizeSearchValue(value: string): string {
   return value.replace(/[(),]/g, " ").replace(/\\/g, " ").trim();
 }
 
-/** Execute a tool and return human-readable Thai markdown response */
+/** Execute a tool and return a human-readable markdown response in the active language. */
 export async function executeInventoryTool(
   toolCall: ToolCall,
   context: ToolExecutionContext,
 ): Promise<{ success: boolean; result: string }> {
   const { tool, args } = toolCall;
   const companyId = context.companyId;
+  const lang = readLang();
+  const t = currentTranslations();
 
   try {
     switch (tool) {
@@ -134,18 +137,19 @@ export async function executeInventoryTool(
 
         if (error) throw error;
         if (!data || data.length === 0) {
-          return { success: true, result: `🔍 ไม่พบรายการสินค้าที่ตรงกับคำค้นหา: "${query}"` };
+          return { success: true, result: t.toolNoMatch(query) };
         }
 
         const lines = data.map((item) => {
-          const statusText = item.current_status === "check_out" ? "🔴 ถูกเบิกออก" : "🟢 พร้อมใช้งาน";
-          const loc = item.location ? ` | ที่เก็บ: ${item.location}` : "";
-          return `- **\`${item.sku_code}\`** ${item.name_th} (${item.quantity} ${item.unit || "ชิ้น"}) — ${statusText}${loc}`;
+          const statusText = item.current_status === "check_out" ? t.toolCheckedOut : t.toolReady;
+          const loc = displayPlain(item.location, lang);
+          const locText = loc ? t.toolLocation(loc) : "";
+          return `- **\`${item.sku_code}\`** ${displayItemName(item, lang)} (${item.quantity} ${displayUnit(item.unit, lang)}) — ${statusText}${locText}`;
         });
 
         return {
           success: true,
-          result: `### 📋 ผลการค้นหา "${query}" (${data.length} รายการ):\n\n${lines.join("\n")}`,
+          result: `${t.toolSearchTitle(query, data.length)}\n\n${lines.join("\n")}`,
         };
       }
 
@@ -158,45 +162,31 @@ export async function executeInventoryTool(
         const { data, error } = await q;
         if (error) throw error;
         if (!data || data.length === 0) {
-          return { success: true, result: `❓ ไม่พบอุปกรณ์รหัสหรือชื่อ: "${code}"` };
+          return { success: true, result: t.toolMissing(code) };
         }
 
         const items = data.map((item) => {
           const isOut = item.current_status === "check_out";
-          const statusBadge = isOut ? "🔴 **ถูกเบิกออกแล้ว**" : "🟢 **พร้อมใช้งานในคลัง**";
-          const handler = isOut && item.last_handler ? `\n  - 👤 **ผู้เบิก:** ${item.last_handler}` : "";
-          const loc = item.location ? `\n  - 📍 **ตำแหน่ง:** ${item.location}` : "";
-          return `**\`${item.sku_code}\` ${item.name_th}**\n  - สถานะ: ${statusBadge}${handler}${loc}\n  - จำนวน: ${item.quantity} ${item.unit || "ชิ้น"}`;
+          const statusBadge = isOut ? t.toolOutLong : t.toolInWarehouse;
+          const handlerName = displayPlain(item.last_handler, lang);
+          const handler = isOut && handlerName ? t.toolHandler(handlerName) : "";
+          const loc = displayPlain(item.location, lang);
+          const locText = loc ? t.toolPlace(loc) : "";
+          return `**\`${item.sku_code}\` ${displayItemName(item, lang)}**\n  - ${t.toolStatusWord}: ${statusBadge}${handler}${locText}\n  - ${t.toolQtyWord}: ${item.quantity} ${displayUnit(item.unit, lang)}`;
         });
 
         return {
           success: true,
-          result: `### 🔍 ข้อมูลสถานะอุปกรณ์:\n\n${items.join("\n\n")}`,
+          result: `${t.toolStatusTitle}\n\n${items.join("\n\n")}`,
         };
       }
 
       case "recommend_equipment_kit": {
         const shootType = args.shoot_type || "Commercial";
-        const kitPresets: Record<string, string[]> = {
-          commercial: [
-            "🎥 **Camera A/B:** Sony FX6 / FX3 หรือ ARRI Alexa Mini LF พร้อม V-Mount Batteries x6",
-            "🔍 **Lenses:** Cine Prime Set (24mm, 35mm, 50mm, 85mm T1.5) + Zoom 24-70mm F2.8",
-            "💡 **Lighting:** Aputure 600d Pro x2, Nova P300c x2, Amaran T4c Tube x4 + C-Stands x6",
-            "🎙️ **Sound:** Wireless Lavalier Mic Set (Sennheiser G4 / DJI Mic 2) + Shotgun Mic MKH416",
-            "📐 **Grip & Monitor:** Wireless Video Transmitter (Hollyland / Teradek) + Director Monitor 7\" + Tripod Heavy Duty",
-          ],
-          mv: [
-            "🎥 **Camera:** High frame rate camera (4K 120fps) + Gimbal DJI RS3 Pro / Steadicam",
-            "🔍 **Lenses:** Fast Anamorphic Lens Set หรือ Ultra-Wide 16-35mm F2.8",
-            "💡 **Lighting:** RGB Color Tubes x8, Aputure 300c RGB x2, Spotlight Mount + Smoke/Haze Machine",
-            "🔋 **Power:** Heavy-duty Portable Battery Station + Multi-charger Dock",
-          ],
-          interview: [
-            "🎥 **Camera:** 2-Camera Setup (Wide master + Tight interview angle) 4K 24/25fps",
-            "🎙️ **Sound:** Dual Wireless Lapel Mics + Boom Pole + Sound Devices MixPre Recorder",
-            "💡 **Lighting:** 3-Point Lighting Kit (Key: Softbox Dome 90cm, Fill: Lantern 300w, Rim/Hair light: 60w)",
-            "📋 **Support:** Sound Blankets, Teleprompter (ถ้ามีสคริปต์ยาว), Comfortable Folding Chairs",
-          ],
+        const kitPresets: Record<string, readonly string[]> = {
+          commercial: t.kitCommercial,
+          mv: t.kitMv,
+          interview: t.kitInterview,
         };
 
         const key = Object.keys(kitPresets).find((k) => shootType.toLowerCase().includes(k)) || "commercial";
@@ -204,26 +194,26 @@ export async function executeInventoryTool(
 
         return {
           success: true,
-          result: `### 🎬 แนะนำ Kit อุปกรณ์สำหรับ: **${shootType}**\n\n${items.join("\n\n")}\n\n💡 *คุณสามารถใช้คำสั่งค้นหา เช่น "มี Aputure ว่างไหม" เพื่อตรวจสอบของจริงในคลังได้ทันที*`,
+          result: `${t.toolKitTitle(shootType)}\n\n${items.join("\n\n")}\n\n${t.toolKitHint}`,
         };
       }
 
       case "generate_sku_report": {
         const type = args.report_type || "checked_out";
         if (type === "checked_out") {
-          let q = supabase.from("skus").select("sku_code, name_th, department, last_handler, updated_at").eq("current_status", "check_out").limit(20);
+          let q = supabase.from("skus").select("sku_code, name_th, name_en, department, last_handler, updated_at").eq("current_status", "check_out").limit(20);
           if (companyId) q = q.eq("company_id", companyId);
           const { data, error } = await q;
           if (error) throw error;
 
           if (!data || data.length === 0) {
-            return { success: true, result: "✅ **ยอดเยี่ยม!** ขณะนี้ไม่มีอุปกรณ์ชิ้นใดถูกเบิกค้างอยู่ ทุกชิ้นอยู่ในคลังพร้อมใช้งาน" };
+            return { success: true, result: t.toolNoneOut };
           }
 
-          const rows = data.map((d) => `- **\`${d.sku_code}\`** ${d.name_th} (${d.department}) — 👤 ผู้เบิก: ${d.last_handler || "ไม่ระบุชื่อ"}`);
+          const rows = data.map((d) => `- **\`${d.sku_code}\`** ${displayItemName(d, lang)} (${d.department}) — ${t.toolBorrowedBy(displayPlain(d.last_handler, lang) || t.toolUnknownPerson)}`);
           return {
             success: true,
-            result: `### 📤 รายการอุปกรณ์ที่ถูกเบิกออกอยู่ (${data.length} รายการล่าสุด):\n\n${rows.join("\n")}`,
+            result: `${t.toolOutList(data.length)}\n\n${rows.join("\n")}`,
           };
         } else {
           let q = supabase.from("skus").select("availability, current_status", { count: "exact" });
@@ -237,7 +227,7 @@ export async function executeInventoryTool(
 
           return {
             success: true,
-            result: `### 📊 สรุปยอดสต๊อกรวม:\n- **จำนวนทั้งหมด:** ${total} รายการ\n- 🟢 **พร้อมใช้งาน:** ${available} รายการ\n- 🔴 **ถูกเบิกออก:** ${checkedOut} รายการ`,
+            result: t.toolSummary(total, available, checkedOut),
           };
         }
       }
@@ -248,12 +238,12 @@ export async function executeInventoryTool(
         const personName = (args.person_name || "").trim();
         const nextStatus = actionType === "check_in" ? "available" : "check_out";
 
-        let skuQuery = supabase.from("skus").select("id, sku_code, name_th, department, company_id").eq("sku_code", skuCode);
+        let skuQuery = supabase.from("skus").select("id, sku_code, name_th, name_en, department, company_id").eq("sku_code", skuCode);
         if (companyId) skuQuery = skuQuery.eq("company_id", companyId);
         const { data: item, error: findErr } = await skuQuery.maybeSingle();
 
         if (findErr || !item) {
-          return { success: false, result: `❌ ไม่พบรหัสสินค้า "${skuCode}" ในระบบ` };
+          return { success: false, result: t.toolSkuMissing(skuCode) };
         }
 
         const [{ error: txErr }, { error: updateErr }] = await Promise.all([
@@ -275,10 +265,11 @@ export async function executeInventoryTool(
           throw new Error((txErr || updateErr)?.message);
         }
 
-        const actionText = actionType === "check_in" ? "📥 นำคืนเรียบร้อยแล้ว" : "📤 บันทึกเบิกออกเรียบร้อยแล้ว";
+        const actionText = actionType === "check_in" ? t.toolCheckedIn : t.toolCheckedOutSaved;
+        const nextLabel = nextStatus === "available" ? t.toolNowAvailable : t.toolNowOut;
         return {
           success: true,
-          result: `✅ **${actionText}**\n- **รหัส:** \`${item.sku_code}\`\n- **ชื่อ:** ${item.name_th}\n- **ผู้ดำเนินการ:** ${personName}\n- **สถานะใหม่:** ${nextStatus === "available" ? "พร้อมใช้งาน (Available)" : "ถูกเบิกออก (Checked Out)"}`,
+          result: `✅ **${actionText}**\n- **${t.toolCode}:** \`${item.sku_code}\`\n- **${t.toolName}:** ${displayItemName(item, lang)}\n- **${t.toolOperator}:** ${personName}\n- **${t.toolNewStatus}:** ${nextLabel}`,
         };
       }
 
@@ -295,14 +286,14 @@ export async function executeInventoryTool(
 
         return {
           success: true,
-          result: `✅ **ซิงก์ Google Sheets แผนก ${dept.toUpperCase()} สำเร็จ!**\n- 📥 เพิ่มใหม่: ${data?.inserted ?? 0} รายการ\n- 🔄 อัปเดต: ${data?.updated ?? 0} รายการ\n- 🗑️ ลบออก: ${data?.deleted ?? 0} รายการ`,
+          result: t.toolSyncOk(dept.toUpperCase(), data?.inserted ?? 0, data?.updated ?? 0, data?.deleted ?? 0),
         };
       }
 
       default:
-        return { success: false, result: `⚠️ เครื่องมือ ${tool} ยังไม่รองรับการทำงาน` };
+        return { success: false, result: t.toolUnsupported(tool) };
     }
   } catch (err: any) {
-    return { success: false, result: `❌ เกิดข้อผิดพลาดในการเรียกคำสั่ง: ${err?.message || String(err)}` };
+    return { success: false, result: t.toolCallError(err?.message || String(err)) };
   }
 }

@@ -1,3 +1,5 @@
+import { messages } from "./i18nMessages";
+
 export type Lang = "th" | "en";
 
 export const translations = {
@@ -13,7 +15,7 @@ export const translations = {
     landingBadge: "มาตรฐานใหม่สำหรับระบบสต๊อกกองถ่าย",
     landingTitle1: "จัดการสต๊อก",
     landingTitle2: "เรื่องง่ายๆ สำหรับกองถ่าย",
-    landingDesc: "จัดการอุปกรณ์, ติดตามพร็อพ, และควบคุมทรัพย์สินในกองถ่ายให้เป็นระเบียบ ด้วย FilmFlow ที่ออกแบบมาเพื่อทีมงานกองถ่ายยุคใหม่โดยเฉพาะ",
+    landingDesc: "จัดการอุปกรณ์, ติดตามพร็อพ, และควบคุมทรัพย์สินในกองถ่ายให้เป็นระเบียบ ด้วย Ctrl+ Inventory ที่ออกแบบมาเพื่อทีมงานกองถ่ายยุคใหม่โดยเฉพาะ",
     landingSync: "เชื่อมต่อ ด้วยระบบซิงค์ Google ชีท",
     landingArt: "แผนกอาร์ต (Art)",
     landingArtDesc: "จัดการพร็อพ, เซ็ต, และของสิ้นเปลือง แยกตามซีนและสถานที่",
@@ -22,7 +24,7 @@ export const translations = {
     landingWd: "แผนกเสื้อผ้า (Wardrobe)",
     landingWdDesc: "ติดตามเครื่องแต่งกาย, เครื่องประดับ, และไซส์นักแสดง ครบจบในระบบเดียว",
     landingHowItWorks: "การใช้งานเบื้องต้น",
-    landingHowItWorksDesc: "เรียนรู้วิธีการจัดการสต๊อกด้วย FilmFlow อย่างง่ายดาย ปลอดภัย และสะดวกสบาย",
+    landingHowItWorksDesc: "เรียนรู้วิธีการจัดการสต๊อกด้วย Ctrl+ Inventory อย่างง่ายดาย ปลอดภัย และสะดวกสบาย",
     landingFeature1Title: "ใช้งานง่ายดาย",
     landingFeature1Desc: "เพียงเข้าสู่ระบบ คุณก็สามารถเริ่มจัดการสต๊อก เบิก-คืน อุปกรณ์ และดูประวัติได้อย่างรวดเร็วผ่านหน้าจอที่ออกแบบมาอย่างเรียบง่าย",
     landingFeature2Title: "ซิงค์ Google Sheets ได้ราบรื่น",
@@ -247,6 +249,7 @@ export const translations = {
     cannotRemoveLastRole: "ไม่สามารถลบ role สุดท้ายได้",
     grantedAccess: (d: string) => `ให้สิทธิ์ดู ${d} แล้ว`,
     revokedAccess: (d: string) => `ถอนสิทธิ์ ${d} แล้ว`,
+    ...messages.th,
   },
 
   en: {
@@ -261,7 +264,7 @@ export const translations = {
     landingBadge: "The new standard for production inventory",
     landingTitle1: "Inventory made",
     landingTitle2: "effortless for film.",
-    landingDesc: "Manage equipment, track props, and keep your production assets in check with FilmFlow. Built specifically for modern production teams.",
+    landingDesc: "Manage equipment, track props, and keep your production assets in check with Ctrl+ Inventory. Built specifically for modern production teams.",
     landingSync: "Seamlessly connects with Google Sheets Sync",
     landingArt: "Art Department",
     landingArtDesc: "Track props, set dressing, and expendables across multiple scenes and locations.",
@@ -270,7 +273,7 @@ export const translations = {
     landingWd: "Wardrobe",
     landingWdDesc: "Keep track of costumes, accessories, and actor sizes all in one centralized system.",
     landingHowItWorks: "How it works",
-    landingHowItWorksDesc: "Learn how to manage your inventory with FilmFlow easily, securely, and seamlessly.",
+    landingHowItWorksDesc: "Learn how to manage your inventory with Ctrl+ Inventory easily, securely, and seamlessly.",
     landingFeature1Title: "Easy to Use",
     landingFeature1Desc: "Simply sign in to start managing your inventory, checking items in and out, and viewing history through an intuitive interface.",
     landingFeature2Title: "Seamless Google Sheets Sync",
@@ -495,6 +498,7 @@ export const translations = {
     cannotRemoveLastRole: "Cannot remove last role",
     grantedAccess: (d: string) => `${d} access granted`,
     revokedAccess: (d: string) => `${d} access revoked`,
+    ...messages.en,
   },
 } as const;
 

@@ -1,6 +1,6 @@
-# FilmFlow-Inventory (SKU Stock App) Blueprint
+# Ctrl+ Inventory Blueprint
 
-**FilmFlow-Inventory** เป็นแอปพลิเคชันสำหรับจัดการคลังสินค้า (Inventory Management) และการเบิกจ่ายของในกองถ่ายภาพยนตร์หรือโปรดักชัน โดยมีการแบ่งหมวดหมู่ (เช่น ฝ่ายศิลป์ - Art, ฝ่ายเสื้อผ้า - Wardrobe) พร้อมระบบสแกนบาร์โค้ด/คิวอาร์โค้ด และมีระบบจัดการสิทธิ์ผู้ใช้งาน (Role-based Access Control)
+**Ctrl+ Inventory** เป็นแอปพลิเคชันสำหรับจัดการคลังสินค้า (Inventory Management) และการเบิกจ่ายของในกองถ่ายภาพยนตร์หรือโปรดักชัน โดยมีการแบ่งหมวดหมู่ (เช่น ฝ่ายศิลป์ - Art, ฝ่ายเสื้อผ้า - Wardrobe) พร้อมระบบสแกนบาร์โค้ด/คิวอาร์โค้ด และมีระบบจัดการสิทธิ์ผู้ใช้งาน (Role-based Access Control)
 
 ## 1. Tech Stack (โครงสร้างเทคโนโลยี)
 

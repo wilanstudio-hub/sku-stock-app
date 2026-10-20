@@ -17,6 +17,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ClipboardList } from "lucide-react";
+import { useLang } from "@/hooks/useLang";
+import { isDemoMode } from "@/lib/demo/mode";
+import { demoTransactions } from "@/lib/demo/catalog";
+import { displayPlain, formatStamp } from "@/lib/uiText";
 
 // ── Module-level cache (5-minute TTL) ─────────────────────────────────────────
 const TX_CACHE_TTL = 5 * 60 * 1000;
@@ -24,9 +28,9 @@ let txCache: { rows: SkuTransaction[]; ts: number } | null = null;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const ACTION_BADGE = {
-  check_out: { label: "📤 เบิกออก", bg: "bg-red-50",     text: "text-red-700",     border: "border-red-200"     },
-  check_in:  { label: "📥 นำคืน",  bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+const ACTION_STYLE = {
+  check_out: { bg: "bg-red-50",     text: "text-red-700",     border: "border-red-200"     },
+  check_in:  { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
 };
 
 const DEPT_BADGE: Record<string, { label: string; bg: string; text: string }> = {
@@ -36,16 +40,6 @@ const DEPT_BADGE: Record<string, { label: string; bg: string; text: string }> = 
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatDate(iso: string) {
-  const d    = new Date(iso);
-  const dd   = String(d.getDate()).padStart(2, "0");
-  const mm   = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  const hh   = String(d.getHours()).padStart(2, "0");
-  const min  = String(d.getMinutes()).padStart(2, "0");
-  return `${dd}/${mm}/${yyyy} - ${hh}:${min} น.`;
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -61,6 +55,7 @@ interface Props {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "all" }: Props) => {
+  const { t, lang } = useLang();
   const [rows, setRows]           = useState<SkuTransaction[]>([]);
   const [loading, setLoading]     = useState(false);
   const [actionFilter, setActionFilter] = useState<ActionFilter>("all");
@@ -72,6 +67,11 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
 
   useEffect(() => {
     if (!open) return;
+    if (isDemoMode()) {
+      setRows(demoTransactions(lang));
+      setLoading(false);
+      return;
+    }
     const now = Date.now();
     if (txCache && now - txCache.ts < TX_CACHE_TTL) {
       setRows(txCache.rows);
@@ -94,7 +94,7 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
       }
     })();
     return () => { cancelled = true; };
-  }, [open]);
+  }, [open, lang]);
 
   const filtered = rows.filter(r => {
     if (actionFilter !== "all" && r.action_type !== actionFilter) return false;
@@ -108,10 +108,10 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-primary" />
-            ประวัติการเบิก-คืน (ทั้งสตูดิโอ)
+            {t.historyDialogTitle}
           </DialogTitle>
           <DialogDescription className="font-th">
-            บันทึกการเบิกออกและนำคืนสิ่งของล่าสุด 200 รายการ
+            {t.historyDialogDesc}
           </DialogDescription>
         </DialogHeader>
 
@@ -122,9 +122,9 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all"       className="text-xs font-th">ทั้งหมด</SelectItem>
-              <SelectItem value="check_out" className="text-xs font-th">📤 Check Out เท่านั้น</SelectItem>
-              <SelectItem value="check_in"  className="text-xs font-th">📥 Check In เท่านั้น</SelectItem>
+              <SelectItem value="all"       className="text-xs font-th">{t.filterAll}</SelectItem>
+              <SelectItem value="check_out" className="text-xs font-th">{t.filterCheckOutOnly}</SelectItem>
+              <SelectItem value="check_in"  className="text-xs font-th">{t.filterCheckInOnly}</SelectItem>
             </SelectContent>
           </Select>
 
@@ -133,24 +133,24 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all"       className="text-xs font-th">ทุกแผนก</SelectItem>
-              <SelectItem value="art"       className="text-xs font-th">🎬 Art</SelectItem>
-              <SelectItem value="wd"        className="text-xs font-th">👗 WD</SelectItem>
-              <SelectItem value="equipment" className="text-xs font-th">📷 Equipment</SelectItem>
+              <SelectItem value="all"       className="text-xs font-th">{t.filterAllDepts}</SelectItem>
+              <SelectItem value="art"       className="text-xs font-th">{t.deptArt}</SelectItem>
+              <SelectItem value="wd"        className="text-xs font-th">{t.deptWd}</SelectItem>
+              <SelectItem value="equipment" className="text-xs font-th">{t.deptEquipment}</SelectItem>
             </SelectContent>
           </Select>
 
           <span className="ml-auto self-center text-xs text-muted-foreground font-mono tabular-nums">
-            {filtered.length} รายการ
+            {t.historyCount(filtered.length)}
           </span>
         </div>
 
         {/* ── Table header ────────────────────────────────────────── */}
         <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-3 pb-1 border-b">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-th">การกระทำ</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-th">SKU / ผู้ดำเนินการ</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-th">แผนก</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-th text-right">วันที่-เวลา</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-th">{t.colAction}</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-th">{t.colSkuOperator}</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-th">{t.colDept}</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-th text-right">{t.colDateTime}</span>
         </div>
 
         {/* ── Rows ────────────────────────────────────────────────── */}
@@ -159,12 +159,13 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
             <div className="w-6 h-6 border-2 border-muted border-t-foreground rounded-full animate-spin" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="py-12 text-center text-sm text-muted-foreground font-th">ไม่มีประวัติ</div>
+          <div className="py-12 text-center text-sm text-muted-foreground font-th">{t.noHistory}</div>
         ) : (
           <ScrollArea className="max-h-[52vh] pr-1">
             <div className="divide-y divide-border/50">
               {filtered.map(tx => {
-                const badge = ACTION_BADGE[tx.action_type] ?? ACTION_BADGE.check_out;
+                const badge = ACTION_STYLE[tx.action_type] ?? ACTION_STYLE.check_out;
+                const badgeLabel = tx.action_type === "check_in" ? t.actionCheckIn : t.actionCheckOut;
                 const dept  = DEPT_BADGE[tx.department]   ?? { label: tx.department, bg: "bg-gray-50", text: "text-gray-600" };
                 return (
                   <div
@@ -173,7 +174,7 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
                   >
                     {/* Action badge */}
                     <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium font-th whitespace-nowrap ${badge.bg} ${badge.text} ${badge.border}`}>
-                      {badge.label}
+                      {badgeLabel}
                     </span>
 
                     {/* SKU + person */}
@@ -182,7 +183,7 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
                         {tx.sku_code}
                       </p>
                       <p className="text-[11px] text-muted-foreground font-th truncate">
-                        {tx.person_name}
+                        {displayPlain(tx.person_name, lang) || tx.person_name}
                       </p>
                     </div>
 
@@ -193,7 +194,7 @@ export const TransactionHistoryDialog = ({ open, onOpenChange, defaultDept = "al
 
                     {/* Date */}
                     <p className="text-[10px] text-muted-foreground font-mono whitespace-nowrap text-right">
-                      {formatDate(tx.created_at)}
+                      {formatStamp(tx.created_at, lang)}
                     </p>
                   </div>
                 );

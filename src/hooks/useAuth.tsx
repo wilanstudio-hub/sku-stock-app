@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { isDemoMode } from "@/lib/demo/mode";
 
 type Role = "admin" | "art" | "wd" | "equipment" | "viewer" | string;
 export type Department = "art" | "wd" | "equipment" | string;
@@ -47,6 +48,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    if (isDemoMode()) {
+      setUser({
+        id: "demo-user",
+        email: "demo@wilan.studio",
+        app_metadata: {},
+        user_metadata: {},
+        aud: "authenticated",
+        created_at: "2026-01-01T00:00:00.000Z",
+      } as User);
+      setRoles(["admin"]);
+      setCompanyId("demo-company");
+      setViewerAccess(["art", "wd", "equipment"]);
+      setLoading(false);
+      return;
+    }
+
     // Safety: if getSession never resolves (Web Locks deadlock on some mobile browsers),
     // release the loading state after 6 seconds so the UI isn't stuck.
     const safetyTimer = setTimeout(() => setLoading(false), 6000);
@@ -107,6 +124,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setRoles([]);
     setViewerAccess([]);
     setSession(null);
+    setCompanyId(null);
+    if (isDemoMode()) {
+      try { sessionStorage.removeItem("ctrl_inventory_demo"); } catch { /* ignore */ }
+      return;
+    }
     await supabase.auth.signOut();
   };
 

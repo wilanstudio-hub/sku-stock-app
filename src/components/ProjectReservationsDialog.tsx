@@ -1,7 +1,10 @@
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useLang } from "@/hooks/useLang";
 import { useTenant } from "@/contexts/TenantContext";
+import { displayItemName, displayPlain, displayUnit } from "@/lib/uiText";
+import type { Lang } from "@/lib/i18n";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -81,35 +84,27 @@ type StatusFilter = "all" | "reserved" | "checked_out" | "returned" | "cancelled
 
 const STATUS_CONFIG: Record<
   Reservation["status"],
-  { label: string; labelEn: string; bg: string; text: string; border: string; icon: React.ReactNode }
+  { bg: string; text: string; border: string; icon: React.ReactNode }
 > = {
   reserved: {
-    label: "จองอุปกรณ์",
-    labelEn: "Reserved",
     bg: "bg-amber-500/10",
     text: "text-amber-600 dark:text-amber-400",
     border: "border-amber-500/30",
     icon: <Clock className="w-3.5 h-3.5" />,
   },
   checked_out: {
-    label: "เบิกออกกองแล้ว",
-    labelEn: "Checked Out",
     bg: "bg-blue-500/10",
     text: "text-blue-600 dark:text-blue-400",
     border: "border-blue-500/30",
     icon: <Truck className="w-3.5 h-3.5" />,
   },
   returned: {
-    label: "คืนคลังเรียบร้อย",
-    labelEn: "Returned",
     bg: "bg-emerald-500/10",
     text: "text-emerald-600 dark:text-emerald-400",
     border: "border-emerald-500/30",
     icon: <CheckCircle2 className="w-3.5 h-3.5" />,
   },
   cancelled: {
-    label: "ยกเลิกแล้ว",
-    labelEn: "Cancelled",
     bg: "bg-rose-500/10",
     text: "text-rose-600 dark:text-rose-400",
     border: "border-rose-500/30",
@@ -117,19 +112,19 @@ const STATUS_CONFIG: Record<
   },
 };
 
-function formatThaiDate(iso: string): string {
+function formatThaiDate(iso: string, lang: Lang = "th"): string {
   if (!iso) return "-";
   const date = new Date(iso);
   if (isNaN(date.getTime())) return "-";
   const dd = String(date.getDate()).padStart(2, "0");
   const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const yyyy = date.getFullYear() + 543;
+  const yyyy = lang === "th" ? date.getFullYear() + 543 : date.getFullYear();
   const hh = String(date.getHours()).padStart(2, "0");
   const min = String(date.getMinutes()).padStart(2, "0");
   return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
-function formatDateRange(startIso: string, endIso: string): string {
+function formatDateRange(startIso: string, endIso: string, lang: Lang = "th"): string {
   if (!startIso || !endIso) return "-";
   const start = new Date(startIso);
   const end = new Date(endIso);
@@ -137,12 +132,12 @@ function formatDateRange(startIso: string, endIso: string): string {
 
   const sDay = String(start.getDate()).padStart(2, "0");
   const sMonth = String(start.getMonth() + 1).padStart(2, "0");
-  const sYear = start.getFullYear() + 543;
+  const sYear = lang === "th" ? start.getFullYear() + 543 : start.getFullYear();
   const sTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
 
   const eDay = String(end.getDate()).padStart(2, "0");
   const eMonth = String(end.getMonth() + 1).padStart(2, "0");
-  const eYear = end.getFullYear() + 543;
+  const eYear = lang === "th" ? end.getFullYear() + 543 : end.getFullYear();
   const eTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
 
   if (sDay === eDay && sMonth === eMonth && sYear === eYear) {
@@ -158,6 +153,13 @@ export function ProjectReservationsDialog({
 }: Props) {
   const { user } = useAuth();
   const { tenant } = useTenant();
+  const { t, lang } = useLang();
+  const statusLabel: Record<Reservation["status"], string> = {
+    reserved: t.resBooked,
+    checked_out: t.resOut,
+    returned: t.resReturned,
+    cancelled: t.resCancelled,
+  };
 
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -197,7 +199,7 @@ export function ProjectReservationsDialog({
       if (itemsError) throw itemsError;
 
       const itemsByRes = new Map<string, ReservationItem[]>();
-      for (const item of (itemsData ?? []) as ReservationItem[]) {
+      for (const item of (itemsData ?? []) as unknown as ReservationItem[]) {
         const existing = itemsByRes.get(item.reservation_id) || [];
         existing.push(item);
         itemsByRes.set(item.reservation_id, existing);
@@ -214,7 +216,7 @@ export function ProjectReservationsDialog({
       onReservationsCountChange?.(activeCount);
     } catch (err: any) {
       console.error("Error loading reservations:", err);
-      toast.error("ไม่สามารถโหลดรายการจองอุปกรณ์ได้: " + (err.message || String(err)));
+      toast.error(t.reservationsLoadError(err.message || String(err)));
     } finally {
       setLoading(false);
     }
@@ -277,16 +279,16 @@ export function ProjectReservationsDialog({
 
       toast.success(
         nextStatus === "checked_out"
-          ? `เบิกอุปกรณ์สำหรับโปรเจกต์ "${reservation.external_project_name}" สำเร็จ`
+          ? t.reservationCheckedOut(reservation.external_project_name)
           : nextStatus === "returned"
-          ? `รับคืนอุปกรณ์จากโปรเจกต์ "${reservation.external_project_name}" ครบถ้วนแล้ว`
-          : `ยกเลิกการจองโปรเจกต์ "${reservation.external_project_name}" แล้ว`
+          ? t.reservationReturned(reservation.external_project_name)
+          : t.reservationCancelled(reservation.external_project_name)
       );
 
       await loadReservations();
     } catch (err: any) {
       console.error("Error updating reservation status:", err);
-      toast.error("เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: " + (err.message || String(err)));
+      toast.error(t.reservationStatusError(err.message || String(err)));
     } finally {
       setUpdatingId(null);
     }
@@ -333,15 +335,15 @@ export function ProjectReservationsDialog({
               </div>
               <div>
                 <DialogTitle className="text-lg font-bold flex items-center gap-2">
-                  <span>การจองอุปกรณ์กองถ่าย (Project Reservations)</span>
+                  <span>{t.reservationsTitle}</span>
                   {activeReservationsCount > 0 && (
                     <Badge variant="default" className="bg-amber-500 hover:bg-amber-600 text-white font-mono text-xs">
-                      {activeReservationsCount} รอดำเนินการ
+                      {t.reservationsPending(activeReservationsCount)}
                     </Badge>
                   )}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  รายการจองอุปกรณ์จาก FilmFlow Open & Pipeline เชื่อมต่อกับคลัง {tenant?.name || "SKU Stock"}
+                  {t.reservationsHelp} {tenant?.name || "Ctrl+ Inventory"}
                 </DialogDescription>
               </div>
             </div>
@@ -354,26 +356,26 @@ export function ProjectReservationsDialog({
               className="gap-1.5 shrink-0 h-8"
             >
               <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
-              <span className="hidden sm:inline text-xs">รีเฟรช</span>
+              <span className="hidden sm:inline text-xs">{t.refresh}</span>
             </Button>
           </div>
 
           {/* Quick Metrics Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-3 border-t border-border/50">
             <div className="bg-background/80 rounded-lg p-2 border border-border/50 text-center">
-              <span className="text-[11px] text-muted-foreground block">ทั้งหมด</span>
+              <span className="text-[11px] text-muted-foreground block">{t.totalLabel}</span>
               <span className="text-base font-bold text-foreground">{reservations.length}</span>
             </div>
             <div className="bg-amber-500/5 rounded-lg p-2 border border-amber-500/20 text-center">
-              <span className="text-[11px] text-amber-600 dark:text-amber-400 block font-medium">รอเบิกออก (Reserved)</span>
+              <span className="text-[11px] text-amber-600 dark:text-amber-400 block font-medium">{t.waitingCheckout}</span>
               <span className="text-base font-bold text-amber-600 dark:text-amber-400">{activeReservationsCount}</span>
             </div>
             <div className="bg-blue-500/5 rounded-lg p-2 border border-blue-500/20 text-center">
-              <span className="text-[11px] text-blue-600 dark:text-blue-400 block font-medium">อยู่ระหว่างใช้งาน</span>
+              <span className="text-[11px] text-blue-600 dark:text-blue-400 block font-medium">{t.inUseNow}</span>
               <span className="text-base font-bold text-blue-600 dark:text-blue-400">{checkedOutCount}</span>
             </div>
             <div className="bg-emerald-500/5 rounded-lg p-2 border border-emerald-500/20 text-center">
-              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 block font-medium">คืนคลังแล้ว</span>
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 block font-medium">{t.returnedStock}</span>
               <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">
                 {reservations.filter((r) => r.status === "returned").length}
               </span>
@@ -385,7 +387,7 @@ export function ProjectReservationsDialog({
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="ค้นหาชื่อโปรเจกต์, รหัส SKU, ผู้จอง..."
+                placeholder={t.searchReservations}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 h-8 text-xs bg-background"
@@ -396,14 +398,14 @@ export function ProjectReservationsDialog({
               onValueChange={(val) => setStatusFilter(val as StatusFilter)}
             >
               <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs bg-background">
-                <SelectValue placeholder="สถานะทั้งหมด" />
+                <SelectValue placeholder={t.allStatuses} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">สถานะทั้งหมด</SelectItem>
-                <SelectItem value="reserved">🟡 จองอุปกรณ์ (Reserved)</SelectItem>
-                <SelectItem value="checked_out">🔵 เบิกออกกองแล้ว (Checked Out)</SelectItem>
-                <SelectItem value="returned">🟢 คืนคลังแล้ว (Returned)</SelectItem>
-                <SelectItem value="cancelled">⚪ ยกเลิกแล้ว (Cancelled)</SelectItem>
+                <SelectItem value="all">{t.allStatuses}</SelectItem>
+                <SelectItem value="reserved">{t.statusReserved}</SelectItem>
+                <SelectItem value="checked_out">{t.statusCheckedOutLong}</SelectItem>
+                <SelectItem value="returned">{t.statusReturned}</SelectItem>
+                <SelectItem value="cancelled">{t.statusCancelled}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -414,12 +416,12 @@ export function ProjectReservationsDialog({
           {loading && reservations.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground text-sm flex flex-col items-center gap-2">
               <RefreshCw className="w-6 h-6 animate-spin text-primary" />
-              <span>กำลังโหลดข้อมูลการจองอุปกรณ์...</span>
+              <span>{t.reservationsLoading}</span>
             </div>
           ) : filtered.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground text-sm flex flex-col items-center gap-2">
               <Box className="w-10 h-10 stroke-1 text-muted-foreground/50" />
-              <span>ไม่พบรายการจองอุปกรณ์ที่ตรงกับเงื่อนไข</span>
+              <span>{t.reservationsEmpty}</span>
             </div>
           ) : (
             <div className="space-y-3">
@@ -451,14 +453,14 @@ export function ProjectReservationsDialog({
                             )}
                           >
                             {statusMeta.icon}
-                            <span>{statusMeta.label}</span>
+                            <span>{statusLabel[res.status] || statusLabel.reserved}</span>
                           </Badge>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground font-mono">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3.5 h-3.5 text-primary/70" />
-                            {formatDateRange(res.start_at, res.end_at)}
+                            {formatDateRange(res.start_at, res.end_at, lang)}
                           </span>
                           <span className="flex items-center gap-1">
                             <User className="w-3.5 h-3.5 text-primary/70" />
@@ -466,7 +468,7 @@ export function ProjectReservationsDialog({
                           </span>
                           <span className="flex items-center gap-1">
                             <Package className="w-3.5 h-3.5 text-primary/70" />
-                            {res.items?.length || 0} รายการ ({totalItemUnits} ชิ้น)
+                            {t.itemCount(res.items?.length || 0, totalItemUnits)}
                           </span>
                         </div>
                       </div>
@@ -481,7 +483,7 @@ export function ProjectReservationsDialog({
                             className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 h-8 text-xs font-semibold"
                           >
                             <Truck className="w-3.5 h-3.5" />
-                            <span>เบิกอุปกรณ์ออกกอง</span>
+                            <span>{t.checkoutToSet}</span>
                           </Button>
                         )}
 
@@ -493,7 +495,7 @@ export function ProjectReservationsDialog({
                             className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 h-8 text-xs font-semibold"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>ตรวจรับคืนคลัง</span>
+                            <span>{t.receiveReturn}</span>
                           </Button>
                         )}
 
@@ -505,7 +507,7 @@ export function ProjectReservationsDialog({
                             onClick={() => handleUpdateStatus(res, "cancelled")}
                             className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 h-8 text-xs"
                           >
-                            ยกเลิก
+                            {t.cancel}
                           </Button>
                         )}
 
@@ -514,7 +516,7 @@ export function ProjectReservationsDialog({
                           size="icon"
                           onClick={() => toggleExpand(res.id)}
                           className="h-8 w-8 text-muted-foreground"
-                          title="ดูรายละเอียดอุปกรณ์"
+                          title={t.viewGear}
                         >
                           {isExpanded ? (
                             <ChevronUp className="w-4 h-4" />
@@ -529,9 +531,9 @@ export function ProjectReservationsDialog({
                     {isExpanded && (
                       <div className="border-t px-4 py-3 bg-background/50 space-y-2">
                         <div className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase flex items-center justify-between">
-                          <span>รายการอุปกรณ์ที่จองไว้ ({res.items?.length || 0})</span>
+                          <span>{t.reservedGear(res.items?.length || 0)}</span>
                           <span className="font-mono text-[10px] text-muted-foreground/70">
-                            Created: {formatThaiDate(res.created_at)}
+                            Created: {formatThaiDate(res.created_at, lang)}
                           </span>
                         </div>
 
@@ -551,11 +553,11 @@ export function ProjectReservationsDialog({
                                   </Badge>
                                   <div className="truncate">
                                     <span className="font-medium text-foreground">
-                                      {item.skus?.name_th || item.skus?.name_en || item.sku_code}
+                                      {item.skus ? (displayItemName(item.skus, lang) || item.sku_code) : item.sku_code}
                                     </span>
                                     {item.skus?.location && (
                                       <span className="text-muted-foreground text-[10px] ml-2">
-                                        (ที่เก็บ: {item.skus.location})
+                                        {displayPlain(item.skus.location, lang) ? t.storedAt(displayPlain(item.skus.location, lang)) : ""}
                                       </span>
                                     )}
                                   </div>
@@ -563,13 +565,13 @@ export function ProjectReservationsDialog({
 
                                 <div className="flex items-center gap-2 font-mono shrink-0 pl-2">
                                   <span className="font-bold text-foreground">x{item.quantity}</span>
-                                  <span className="text-muted-foreground text-[10px]">ชิ้น</span>
+                                  <span className="text-muted-foreground text-[10px]">{displayUnit(null, lang)}</span>
                                 </div>
                               </div>
                             ))
                           ) : (
                             <div className="p-3 text-center text-xs text-muted-foreground">
-                              ไม่มีรายการย่อย
+                              {t.noChildItems}
                             </div>
                           )}
                         </div>

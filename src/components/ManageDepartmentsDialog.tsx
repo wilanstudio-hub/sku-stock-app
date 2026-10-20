@@ -7,6 +7,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Edit2, Save } from "lucide-react";
+import { useLang } from "@/hooks/useLang";
+import { displayDeptName } from "@/lib/uiText";
+import { isDemoMode } from "@/lib/demo/mode";
+import { DEMO_DEPARTMENTS } from "@/lib/demo/catalog";
 
 interface Props {
   open: boolean;
@@ -21,6 +25,7 @@ function extractSheetId(input: string): string {
 }
 
 export const ManageDepartmentsDialog = ({ open, onOpenChange, onUpdated }: Props) => {
+  const { t, lang } = useLang();
   const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -35,6 +40,11 @@ export const ManageDepartmentsDialog = ({ open, onOpenChange, onUpdated }: Props
 
   const load = async () => {
     setLoading(true);
+    if (isDemoMode()) {
+      setDepartments(DEMO_DEPARTMENTS);
+      setLoading(false);
+      return;
+    }
     const { data, error } = await supabase.from("departments").select("*").order("order_index");
     if (error) toast.error(error.message);
     else setDepartments(data ?? []);
@@ -57,7 +67,7 @@ export const ManageDepartmentsDialog = ({ open, onOpenChange, onUpdated }: Props
 
   const handleSave = async () => {
     if (!code.trim() || !nameTh.trim()) {
-      toast.error("กรุณากรอก Code และ ชื่อหมวดหมู่ให้ครบถ้วน");
+      toast.error(t.deptRequired);
       return;
     }
 
@@ -84,7 +94,7 @@ export const ManageDepartmentsDialog = ({ open, onOpenChange, onUpdated }: Props
     const extractedId = extractSheetId(sheetUrl);
     if (extractedId) {
       const regPayload = {
-        name: `คลังหลัก ${nameTh.trim()}`,
+        name: t.sheetMainName(nameTh.trim()),
         sheet_id: extractedId,
         department: deptCode,
         sku_prefix: "",
@@ -105,18 +115,18 @@ export const ManageDepartmentsDialog = ({ open, onOpenChange, onUpdated }: Props
       // If they cleared the URL but it had one, we could delete it or leave it. We'll leave it or they should use ManageSheetsDialog.
     }
 
-    toast.success(editingId ? "อัปเดตหมวดหมู่สำเร็จ" : "เพิ่มหมวดหมู่สำเร็จ");
+    toast.success(editingId ? t.deptUpdated : t.deptAdded);
     resetForm();
     load();
     onUpdated();
   };
 
   const handleDelete = async (id: string, deptCode: string) => {
-    if (!confirm(`คุณต้องการลบหมวดหมู่ "${deptCode}" ใช่หรือไม่?\nข้อมูลสินค้าจะไม่ถูกลบ แต่จะเข้าถึงผ่านแท็บนี้ไม่ได้`)) return;
+    if (!confirm(t.deptDeleteConfirm(deptCode))) return;
     const { error } = await supabase.from("departments").delete().eq("id", id);
     if (error) toast.error(error.message);
     else {
-      toast.success("ลบหมวดหมู่สำเร็จ");
+      toast.success(t.deptDeleted);
       load();
       onUpdated();
     }
@@ -150,18 +160,18 @@ export const ManageDepartmentsDialog = ({ open, onOpenChange, onUpdated }: Props
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>จัดการแท็บหลัก (หมวดหมู่แผนก)</DialogTitle>
+          <DialogTitle>{t.deptDialogTitle}</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-4 pt-4">
           {/* List existing departments */}
           <div className="space-y-2">
             {loading ? (
-              <p className="text-sm text-muted-foreground">กำลังโหลด...</p>
+              <p className="text-sm text-muted-foreground">{t.loading}</p>
             ) : departments.map(d => (
               <div key={d.id} className="flex items-center justify-between p-3 border rounded bg-card">
                 <div>
-                  <div className="font-semibold">{d.name_th}</div>
+                  <div className="font-semibold">{displayDeptName(d, lang)}</div>
                   <div className="text-xs text-muted-foreground font-mono">
                     Code: {d.code} | Format: {d.sync_format}
                   </div>
@@ -181,53 +191,53 @@ export const ManageDepartmentsDialog = ({ open, onOpenChange, onUpdated }: Props
           <hr />
 
           <div className="space-y-4 pt-2">
-            <h4 className="font-semibold">{editingId ? "แก้ไขหมวดหมู่" : "เพิ่มหมวดหมู่ใหม่"}</h4>
+            <h4 className="font-semibold">{editingId ? t.deptEdit : t.deptAdd}</h4>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Department Code (ภาษาอังกฤษพิมพ์เล็ก)</Label>
+                <Label>{t.deptCodeLabel}</Label>
                 <Input value={code} onChange={e => setCode(e.target.value.toLowerCase())} placeholder="e.g. location" disabled={!!editingId} />
-                <p className="text-[10px] text-muted-foreground">ใช้สำหรับสิทธิ์ผู้ใช้ (User Roles)</p>
+                <p className="text-[10px] text-muted-foreground">{t.deptCodeHint}</p>
               </div>
               <div className="space-y-1.5">
-                <Label>ชื่อแท็บที่แสดง (Name)</Label>
-                <Input value={nameTh} onChange={e => setNameTh(e.target.value)} placeholder="e.g. Location / โลเคชั่น" />
+                <Label>{t.deptNameLabel}</Label>
+                <Input value={nameTh} onChange={e => setNameTh(e.target.value)} placeholder={t.deptNamePlaceholder} />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label>ลิงก์ Google Sheet (คลังหลัก)</Label>
+              <Label>{t.deptSheetLabel}</Label>
               <Input value={sheetUrl} onChange={e => setSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." />
-              <p className="text-[10px] text-muted-foreground">ถ้ามีหลายชีทย่อยในหมวดนี้ ให้ไปกด '+ จัดการคลัง' ที่หน้าตารางแทน</p>
+              <p className="text-[10px] text-muted-foreground">{t.deptSheetHint}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>รูปแบบตาราง (Sync Format)</Label>
+                <Label>{t.deptFormatLabel}</Label>
                 <Select value={syncFormat} onValueChange={setSyncFormat}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="equipment">รูปแบบมาตรฐาน (Equipment)</SelectItem>
-                    <SelectItem value="art">รูปแบบ Props (Art)</SelectItem>
-                    <SelectItem value="wd">รูปแบบเสื้อผ้า (WD)</SelectItem>
+                    <SelectItem value="equipment">{t.deptFormatEquipment}</SelectItem>
+                    <SelectItem value="art">{t.deptFormatArt}</SelectItem>
+                    <SelectItem value="wd">{t.deptFormatWd}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>ไอคอน (Icon name)</Label>
+                <Label>{t.deptIconLabel}</Label>
                 <Select value={icon} onValueChange={setIcon}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="package">Package (กล่อง)</SelectItem>
-                    <SelectItem value="clapperboard">Clapperboard (สเลท)</SelectItem>
-                    <SelectItem value="shirt">Shirt (เสื้อผ้า)</SelectItem>
-                    <SelectItem value="camera">Camera (กล้อง)</SelectItem>
-                    <SelectItem value="map-pin">Map Pin (สถานที่)</SelectItem>
-                    <SelectItem value="car">Car (ยานพาหนะ)</SelectItem>
+                    <SelectItem value="package">{t.iconPackage}</SelectItem>
+                    <SelectItem value="clapperboard">{t.iconClapper}</SelectItem>
+                    <SelectItem value="shirt">{t.iconShirt}</SelectItem>
+                    <SelectItem value="camera">{t.iconCamera}</SelectItem>
+                    <SelectItem value="map-pin">{t.iconMap}</SelectItem>
+                    <SelectItem value="car">{t.iconCar}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -235,10 +245,10 @@ export const ManageDepartmentsDialog = ({ open, onOpenChange, onUpdated }: Props
 
             <div className="flex justify-end gap-2 pt-2">
               {editingId && (
-                <Button variant="ghost" onClick={resetForm}>ยกเลิก</Button>
+                <Button variant="ghost" onClick={resetForm}>{t.cancel}</Button>
               )}
               <Button onClick={handleSave} className="gap-2">
-                <Save className="w-4 h-4" /> {editingId ? "บันทึกการแก้ไข" : "เพิ่มหมวดหมู่"}
+                <Save className="w-4 h-4" /> {editingId ? t.saveEdit : t.addCategory}
               </Button>
             </div>
           </div>

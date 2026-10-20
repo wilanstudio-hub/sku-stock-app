@@ -42,7 +42,7 @@ const ROLE_COLOR: Record<AppRole, string> = {
 export default function AdminPage() {
   const { roles, companyId, loading: authLoading } = useAuth();
   const { tenant, refreshTenant } = useTenant();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const nav = useNavigate();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [userRoles, setUserRoles] = useState<RoleRow[]>([]);
@@ -95,7 +95,7 @@ export default function AdminPage() {
     const userRoleList = rolesOf(uid).filter((roleRow) => !billingCompany || roleRow.company_id === billingCompany.id);
     const seatLimit = billingCompany?.seat_limit || 3;
     if (userRoleList.length === 0 && billingCompanySeatCount >= seatLimit) {
-      toast.error(`สตูดิโอของคุณใช้โควต้าที่นั่งครบตามแผนแล้ว (${seatLimit} ที่นั่ง) กรุณาอัปเกรดแผนเพื่อเพิ่มสมาชิก`);
+      toast.error(t.seatLimitReached(seatLimit));
       setBillingOpen(true);
       return;
     }
@@ -135,13 +135,13 @@ export default function AdminPage() {
   };
 
   const handleSyncSheet = async () => {
-    if (!sheetUrl) return toast.error("กรุณาวางลิงก์ Google Sheets");
+    if (!sheetUrl) return toast.error(t.sheetLinkRequired);
     
     const sheetId = extractSheetId(sheetUrl);
-    if (!sheetId) return toast.error("ลิงก์ไม่ถูกต้อง กรุณาตรวจสอบลิงก์ Google Sheets อีกครั้ง");
+    if (!sheetId) return toast.error(t.sheetLinkInvalid);
 
     setSyncing(true);
-    const toastId = toast.loading("กำลังเตรียมการ Sync ข้อมูล...");
+    const toastId = toast.loading(t.syncPreparing);
 
     try {
       // 1. Register the sheet if not already registered
@@ -159,10 +159,10 @@ export default function AdminPage() {
           sku_prefix: "",
           name: "Synced from Admin"
         });
-        if (regError) throw new Error("ไม่สามารถลงทะเบียน Sheet ได้: " + regError.message);
+        if (regError) throw new Error(t.sheetRegisterFailed(regError.message));
       }
 
-      toast.loading("กำลังดึงและอัปเดตข้อมูล... (อาจใช้เวลาสักครู่)", { id: toastId });
+      toast.loading(t.syncPulling, { id: toastId });
 
       // 2. Trigger the edge function
       const { data, error } = await supabase.functions.invoke("sync-equipment-sheet", {
@@ -172,10 +172,10 @@ export default function AdminPage() {
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
-      toast.success(`Sync สำเร็จ! เพิ่ม ${data.inserted} รายการ, อัปเดต ${data.updated} รายการ`, { id: toastId });
+      toast.success(t.syncDoneCounts(data.inserted, data.updated), { id: toastId });
       setSheetUrl("");
     } catch (err: any) {
-      toast.error(err.message || "เกิดข้อผิดพลาดในการ Sync", { id: toastId });
+      toast.error(err.message || t.syncErrorGeneric, { id: toastId });
     } finally {
       setSyncing(false);
     }
@@ -184,20 +184,20 @@ export default function AdminPage() {
   const updateCompanyStatus = async (id: string, status: string) => {
     const { error } = await supabase.from("companies").update({ status }).eq("id", id);
     if (error) {
-      toast.error("ไม่สามารถอัปเดตสถานะได้: " + error.message);
+      toast.error(t.statusUpdateFailed(error.message));
     } else {
-      toast.success(`อัปเดตสถานะเป็น ${status} สำเร็จ`);
+      toast.success(t.statusUpdated(status));
       load();
     }
   };
 
   const deleteCompany = async (id: string, name: string) => {
-    if (!window.confirm(`ต้องการลบสตูดิโอ "${name}" ออกจากระบบหรือไม่?`)) return;
+    if (!window.confirm(t.studioDeleteConfirm(name))) return;
     const { error } = await supabase.from("companies").delete().eq("id", id);
     if (error) {
-      toast.error("ไม่สามารถลบสตูดิโอได้: " + error.message);
+      toast.error(t.studioDeleteFailed(error.message));
     } else {
-      toast.success("ลบสตูดิโอแล้ว");
+      toast.success(t.studioDeleted);
       load();
     }
   };
@@ -231,7 +231,7 @@ export default function AdminPage() {
             <div className="space-y-1.5 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  แผนการใช้งานสตูดิโอ ({billingCompany?.name || "สตูดิโอของคุณ"})
+                  {t.billingTitle(billingCompany?.name || t.yourStudio)}
                 </span>
                 <Badge variant="default" className="text-[10px] uppercase font-bold bg-primary text-primary-foreground">
                   {billingCompany?.billing_plan ? billingCompany.billing_plan.toUpperCase() : "FREE"} PLAN
@@ -251,11 +251,11 @@ export default function AdminPage() {
               <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
                 <span className="flex items-center gap-1 font-medium text-foreground">
                   <Users className="w-3.5 h-3.5 text-primary" />
-                  ที่นั่งที่ใช้: {billingCompanySeatCount} / {billingCompany?.seat_limit || 3} ที่นั่ง
+                  {t.seatsUsed(billingCompanySeatCount, billingCompany?.seat_limit || 3)}
                 </span>
                 <span>•</span>
                 <span>
-                  หมดอายุ: {billingCompany?.billing_expires_at ? new Date(billingCompany.billing_expires_at).toLocaleDateString("th-TH") : "ไม่ระบุ (Free Cycle)"}
+                  {t.expires(billingCompany?.billing_expires_at ? new Date(billingCompany.billing_expires_at).toLocaleDateString(lang === "th" ? "th-TH" : "en-GB") : t.expiresUnknown)}
                 </span>
               </div>
 
@@ -268,7 +268,7 @@ export default function AdminPage() {
               onClick={() => setBillingOpen(true)}
               className="gap-2 shrink-0 bg-gradient-to-r from-primary to-orange-500 hover:opacity-90 text-white font-semibold text-xs h-9 px-4 rounded-lg shadow-sm"
             >
-              <Sparkles className="w-4 h-4" /> จัดการแผน / ขยายที่นั่ง
+              <Sparkles className="w-4 h-4" /> {t.managePlan}
             </Button>
           </CardContent>
         </Card>
@@ -279,7 +279,7 @@ export default function AdminPage() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-primary" />
-                สตูดิโอในระบบ SaaS Multi-Tenant ({companies.length})
+                {t.studiosTitle(companies.length)}
               </CardTitle>
               <Badge variant="outline" className="text-xs font-mono">
                 Subdomain Architecture
@@ -288,7 +288,7 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             {companies.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">ยังไม่มีสตูดิโอลงทะเบียนในระบบ</p>
+              <p className="text-sm text-muted-foreground py-4 text-center">{t.noStudios}</p>
             ) : (
               <div className="divide-y rounded-lg border">
                 {companies.map((c) => (
@@ -316,8 +316,8 @@ export default function AdminPage() {
                         <span className="font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded uppercase text-[10px] font-semibold">
                           plan: {c.billing_plan || "free"} ({c.seat_limit || 3} seats)
                         </span>
-                        {c.contact_email && <span>อีเมล: {c.contact_email}</span>}
-                        {c.contact_name && <span>ผู้ติดต่อ: {c.contact_name}</span>}
+                        {c.contact_email && <span>{t.emailLabelShort}: {c.contact_email}</span>}
+                        {c.contact_name && <span>{t.contactLabelShort}: {c.contact_name}</span>}
                       </div>
                     </div>
 
@@ -328,7 +328,7 @@ export default function AdminPage() {
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 text-xs text-primary hover:underline px-2 py-1 rounded border hover:bg-muted"
                       >
-                        <ExternalLink className="w-3 h-3" /> เปิด Workspace
+                        <ExternalLink className="w-3 h-3" /> {t.openWorkspace}
                       </a>
                       {c.status === "pending" && (
                         <Button
@@ -337,7 +337,7 @@ export default function AdminPage() {
                           className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700"
                           onClick={() => updateCompanyStatus(c.id, "active")}
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> อนุมัติ
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> {t.approve}
                         </Button>
                       )}
                       {c.status === "active" && (
@@ -347,7 +347,7 @@ export default function AdminPage() {
                           className="h-7 text-xs text-amber-600 hover:bg-amber-50"
                           onClick={() => updateCompanyStatus(c.id, "suspended")}
                         >
-                          ระงับ
+                          {t.suspend}
                         </Button>
                       )}
                       {c.status === "suspended" && (
@@ -357,7 +357,7 @@ export default function AdminPage() {
                           className="h-7 text-xs text-emerald-600 hover:bg-emerald-50"
                           onClick={() => updateCompanyStatus(c.id, "active")}
                         >
-                          เปิดใช้งาน
+                          {t.reactivate}
                         </Button>
                       )}
                       <Button
@@ -365,7 +365,7 @@ export default function AdminPage() {
                         variant="ghost"
                         className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                         onClick={() => deleteCompany(c.id, c.name)}
-                        title="ลบสตูดิโอ"
+                        title={t.deleteStudio}
                       >
                         <X className="w-3.5 h-3.5" />
                       </Button>
@@ -381,12 +381,12 @@ export default function AdminPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <RefreshCw className="w-4 h-4 text-primary" />
-              ซิงก์ข้อมูลจาก Google Sheets (Equipment)
+              {t.syncEquipmentTitle}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-3">
-              วางลิงก์ Google Sheets ที่คุณต้องการซิงก์ข้อมูลสต๊อก (อย่าลืมแชร์สิทธิ์ Viewer ให้กับอีเมลบอท: <code className="bg-muted px-1.5 py-0.5 rounded text-xs select-all">filmflow-sheet-sync-bot@filmflow-inventory-sync.iam.gserviceaccount.com</code> ก่อนกด Sync)
+              {t.syncEquipmentHelp} <code className="bg-muted px-1.5 py-0.5 rounded text-xs select-all">filmflow-sheet-sync-bot@filmflow-inventory-sync.iam.gserviceaccount.com</code> {t.syncEquipmentHelpAfter}
             </p>
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -403,10 +403,10 @@ export default function AdminPage() {
                 {syncing ? (
                   <>
                     <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    กำลังซิงก์...
+                    {t.syncing}
                   </>
                 ) : (
-                  "Sync ข้อมูล"
+                  t.syncData
                 )}
               </Button>
             </div>

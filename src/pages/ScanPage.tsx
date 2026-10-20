@@ -9,6 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AppLogo } from "@/components/AppLogo";
 import { useTenant } from "@/contexts/TenantContext";
+import { useLang } from "@/hooks/useLang";
+import { isDemoMode } from "@/lib/demo/mode";
+import { demoCheck, demoSkuByCode, demoTransactions } from "@/lib/demo/catalog";
+import { displayItemName, displayItemSubtitle, displayPlain, displayUnit, formatStamp } from "@/lib/uiText";
 import {
   Select,
   SelectContent,
@@ -25,36 +29,26 @@ const DEPT_LABEL: Record<string, string> = {
   equipment: "Equipment",
 };
 
-const AVAIL_CONFIG = {
-  available:   { label: "ว่าง",    bg: "bg-emerald-50",  text: "text-emerald-700", dot: "bg-emerald-500" },
-  on_event:    { label: "ติดงาน",  bg: "bg-amber-50",    text: "text-amber-700",   dot: "bg-amber-500"   },
-  unavailable: { label: "ไม่ว่าง", bg: "bg-red-50",      text: "text-red-700",     dot: "bg-red-500"     },
+const AVAIL_STYLE = {
+  available:   { bg: "bg-emerald-50",  text: "text-emerald-700", dot: "bg-emerald-500" },
+  on_event:    { bg: "bg-amber-50",    text: "text-amber-700",   dot: "bg-amber-500"   },
+  unavailable: { bg: "bg-red-50",      text: "text-red-700",     dot: "bg-red-500"     },
 };
 
-const STATUS_CONFIG = {
-  available: { label: "พร้อมใช้งาน", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-  check_out: { label: "ถูกเบิกออก",  bg: "bg-orange-50",  text: "text-orange-700",  border: "border-orange-200"  },
+const STATUS_STYLE = {
+  available: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  check_out: { bg: "bg-orange-50",  text: "text-orange-700",  border: "border-orange-200"  },
 };
 
-const ACTION_BADGE = {
-  check_out: { label: "📤 เบิกออก", bg: "bg-red-50",     text: "text-red-700",     border: "border-red-200"     },
-  check_in:  { label: "📥 นำคืน",  bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+const ACTION_STYLE = {
+  check_out: { bg: "bg-red-50",     text: "text-red-700",     border: "border-red-200"     },
+  check_in:  { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function clip(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
-}
-
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  const dd   = String(d.getDate()).padStart(2, "0");
-  const mm   = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  const hh   = String(d.getHours()).padStart(2, "0");
-  const min  = String(d.getMinutes()).padStart(2, "0");
-  return `${dd}/${mm}/${yyyy} - ${hh}:${min} น.`;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -65,6 +59,7 @@ export default function ScanPage() {
   const [params] = useSearchParams();
   const skuCode = params.get("sku") ?? "";
   const { tenant } = useTenant();
+  const { t, lang } = useLang();
 
   const [sku, setSku]               = useState<Sku | null>(null);
   const [loading, setLoading]       = useState(true);
@@ -82,13 +77,23 @@ export default function ScanPage() {
 
   const fetchData = async () => {
     if (!skuCode) {
-      setError("ไม่พบรหัสสินค้าใน URL");
+      setError(t.scanMissingCode);
       setLoading(false);
       return;
     }
 
     setLoading(true);
     setTxLoading(true);
+
+    if (isDemoMode()) {
+      const found = demoSkuByCode(skuCode, lang);
+      setSku(found);
+      setError(found ? null : t.scanMissingItem(skuCode));
+      setTransactions(demoTransactions(lang).filter((tx) => tx.sku_code === skuCode));
+      setLoading(false);
+      setTxLoading(false);
+      return;
+    }
 
     try {
       let skuQuery = supabase.from("skus").select("*").eq("sku_code", skuCode);
@@ -114,20 +119,20 @@ export default function ScanPage() {
       if (e) {
         setError(e.message);
       } else if (!data) {
-        setError(`ไม่พบสินค้ารหัส "${skuCode}"`);
+        setError(t.scanMissingItem(skuCode));
       } else {
         setSku(data as Sku);
       }
       setTransactions((txData ?? []) as SkuTransaction[]);
     } catch (err: any) {
-      setError(err?.message ?? "เกิดข้อผิดพลาดในการโหลดข้อมูล");
+      setError(err?.message ?? t.scanLoadError);
     } finally {
       setLoading(false);
       setTxLoading(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, [skuCode]);
+  useEffect(() => { fetchData(); }, [skuCode, lang]);
 
   useEffect(() => {
     if (sheetOpen) {
@@ -141,7 +146,7 @@ export default function ScanPage() {
   const isCheckedOut  = currentStatus === "check_out";
   const actionType: SkuTransaction["action_type"] = isCheckedOut ? "check_in" : "check_out";
   const nextStatus: Sku["current_status"]         = isCheckedOut ? "available" : "check_out";
-  const actionLabel = isCheckedOut ? "นำคืน" : "เบิกออก";
+  const actionLabel = isCheckedOut ? t.scanCheckIn : t.scanCheckOut;
 
   const filteredTx = txFilter === "all"
     ? transactions
@@ -151,6 +156,14 @@ export default function ScanPage() {
     if (!sku || !personName.trim()) return;
     setSubmitting(true);
     setSubmitError(null);
+
+    if (isDemoMode()) {
+      demoCheck(sku.sku_code, actionType, personName.trim(), lang);
+      setSheetOpen(false);
+      setSubmitting(false);
+      fetchData();
+      return;
+    }
 
     const [txResult, skuResult] = await Promise.all([
       supabase.from("sku_transactions").insert({
@@ -186,7 +199,7 @@ export default function ScanPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-gray-400">
           <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-          <p className="text-sm font-mono">กำลังโหลด…</p>
+          <p className="text-sm font-mono">{t.scanLoading}</p>
         </div>
       </div>
     );
@@ -198,7 +211,7 @@ export default function ScanPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8 w-full max-w-xs text-center flex flex-col items-center gap-4">
           <Package className="w-12 h-12 text-gray-300" />
-          <p className="text-sm text-gray-500 font-th">{error ?? "ไม่พบสินค้า"}</p>
+          <p className="text-sm text-gray-500 font-th">{error ?? t.scanNotFound}</p>
           {skuCode && (
             <p className="font-mono text-xs text-gray-400 bg-gray-50 rounded px-3 py-1">{skuCode}</p>
           )}
@@ -208,14 +221,21 @@ export default function ScanPage() {
   }
 
   // ── Data ───────────────────────────────────────────────────────────────────
+  const itemName = displayItemName(sku, lang);
+  const itemSubtitle = displayItemSubtitle(sku, lang);
+  const locationText = displayPlain(sku.location, lang);
+  const notesText = displayPlain(lang === "en" ? (sku.notes_en || sku.notes_th) : sku.notes_th, lang);
   const dept         = DEPT_LABEL[sku.department] ?? sku.department.toUpperCase();
-  const categoryLine = [dept, sku.category].filter(Boolean).join(" · ");
-  const avail        = AVAIL_CONFIG[sku.availability] ?? AVAIL_CONFIG.available;
-  const statusCfg    = STATUS_CONFIG[currentStatus as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.available;
+  const categoryText = displayPlain(sku.category, lang);
+  const categoryLine = [dept, categoryText].filter(Boolean).join(" · ");
+  const availStyle   = AVAIL_STYLE[sku.availability] ?? AVAIL_STYLE.available;
+  const availLabel   = sku.availability === "on_event" ? t.availOnEvent : sku.availability === "unavailable" ? t.availUnavailable : t.availAvailable;
+  const statusStyle  = STATUS_STYLE[currentStatus as keyof typeof STATUS_STYLE] ?? STATUS_STYLE.available;
+  const statusLabel  = currentStatus === "check_out" ? t.statusCheckedOut : t.statusReady;
   const coverImage   = (sku.image_urls ?? []).filter(Boolean)[0] ?? sku.image_url ?? null;
   const footerParts  = [
-    `LOC  ${sku.location ? clip(sku.location, 18) : "—"}`,
-    `BOX  ${sku.notes_th ? clip(sku.notes_th, 22) : "—"}`,
+    `LOC  ${locationText ? clip(locationText, 18) : "—"}`,
+    `BOX  ${notesText ? clip(notesText, 22) : "—"}`,
   ];
 
   return (
@@ -228,9 +248,9 @@ export default function ScanPage() {
           <div className="flex justify-between items-center px-5 pt-5 pb-3 font-mono text-[11px] tracking-[0.1em] uppercase text-gray-400">
             <span className="flex items-center gap-1.5 font-bold text-gray-700">
               <AppLogo theme="light" variant="icon" className="h-4 w-4" />
-              <span>{tenant?.name || "SKU Stock"}</span>
+              <span>{tenant?.name || "Ctrl+ Inventory"}</span>
             </span>
-            <span>SKU · STOCK</span>
+            <span>Ctrl+ Inventory</span>
           </div>
 
           <hr className="border-gray-100 mx-5" />
@@ -239,7 +259,7 @@ export default function ScanPage() {
             <div className="flex justify-center px-5 pt-4">
               <img
                 src={coverImage}
-                alt={sku.name_th}
+                alt={itemName}
                 className="w-full max-h-52 object-contain rounded-xl border border-gray-100"
                 loading="lazy"
               />
@@ -257,33 +277,33 @@ export default function ScanPage() {
           </p>
 
           <div className="text-center px-5 pt-1 space-y-0.5">
-            <p className="text-lg font-semibold leading-snug text-gray-800 font-th">{sku.name_th}</p>
-            {sku.name_en && sku.name_en !== sku.name_th && (
-              <p className="text-sm leading-snug text-gray-500 font-th">{sku.name_en}</p>
+            <p className="text-lg font-semibold leading-snug text-gray-800 font-th">{itemName}</p>
+            {itemSubtitle && (
+              <p className="text-sm leading-snug text-gray-500 font-th">{itemSubtitle}</p>
             )}
           </div>
 
           <p className="text-xs text-gray-400 text-center px-5 pt-1 font-th">{categoryLine || "—"}</p>
 
           <div className="flex items-center justify-center gap-3 px-5 pt-3">
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${avail.bg} ${avail.text}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${avail.dot}`} />
-              {avail.label}
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${availStyle.bg} ${availStyle.text}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${availStyle.dot}`} />
+              {availLabel}
             </span>
             <span className="text-xs text-gray-400 font-mono">
-              {sku.quantity} {sku.unit ?? "ชิ้น"}
+              {sku.quantity} {displayUnit(sku.unit, lang)}
             </span>
           </div>
 
           <hr className="border-gray-100 mx-5 mt-4" />
 
-          <div className={`mx-5 my-4 rounded-xl border px-4 py-3 ${statusCfg.bg} ${statusCfg.border}`}>
+          <div className={`mx-5 my-4 rounded-xl border px-4 py-3 ${statusStyle.bg} ${statusStyle.border}`}>
             <div className="flex items-center justify-between">
-              <span className={`text-xs font-semibold font-th ${statusCfg.text}`}>
-                {statusCfg.label}
+              <span className={`text-xs font-semibold font-th ${statusStyle.text}`}>
+                {statusLabel}
               </span>
-              {isCheckedOut && sku.last_handler && (
-                <span className="text-xs text-orange-600 font-th">โดย {sku.last_handler}</span>
+              {isCheckedOut && displayPlain(sku.last_handler, lang) && (
+                <span className="text-xs text-orange-600 font-th">{t.checkedOutBy(displayPlain(sku.last_handler, lang))}</span>
               )}
             </div>
           </div>
@@ -299,16 +319,16 @@ export default function ScanPage() {
           {/* Header + filter */}
           <div className="flex items-center justify-between px-4 pt-4 pb-3">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider font-th">
-              ประวัติการเบิก-คืน
+              {t.scanHistoryTitle}
             </p>
             <Select value={txFilter} onValueChange={v => setTxFilter(v as TxFilter)}>
               <SelectTrigger className="h-7 text-xs w-auto min-w-[130px] border-gray-200 font-th">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" className="text-xs font-th">ทั้งหมด</SelectItem>
-                <SelectItem value="check_out" className="text-xs font-th">📤 Check Out เท่านั้น</SelectItem>
-                <SelectItem value="check_in"  className="text-xs font-th">📥 Check In เท่านั้น</SelectItem>
+                <SelectItem value="all" className="text-xs font-th">{t.filterAll}</SelectItem>
+                <SelectItem value="check_out" className="text-xs font-th">{t.filterCheckOutOnly}</SelectItem>
+                <SelectItem value="check_in"  className="text-xs font-th">{t.filterCheckInOnly}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -321,24 +341,25 @@ export default function ScanPage() {
               <div className="w-5 h-5 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin" />
             </div>
           ) : filteredTx.length === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-8 font-th">ไม่มีประวัติ</p>
+            <p className="text-xs text-gray-400 text-center py-8 font-th">{t.noHistory}</p>
           ) : (
             <div className="divide-y divide-gray-50">
               {filteredTx.map(tx => {
-                const badge = ACTION_BADGE[tx.action_type] ?? ACTION_BADGE.check_out;
+                const badge = ACTION_STYLE[tx.action_type] ?? ACTION_STYLE.check_out;
+                const badgeLabel = tx.action_type === "check_in" ? t.actionCheckIn : t.actionCheckOut;
                 return (
                   <div key={tx.id} className="flex items-start gap-3 px-4 py-3">
                     {/* Action badge */}
                     <span className={`shrink-0 inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium font-th ${badge.bg} ${badge.text} ${badge.border}`}>
-                      {badge.label}
+                      {badgeLabel}
                     </span>
                     {/* Name + date */}
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold text-gray-800 truncate font-th">
-                        {tx.person_name}
+                        {displayPlain(tx.person_name, lang) || tx.person_name}
                       </p>
                       <p className="text-[10px] text-gray-400 font-mono mt-0.5">
-                        {formatDate(tx.created_at)}
+                        {formatStamp(tx.created_at, lang)}
                       </p>
                     </div>
                   </div>
@@ -359,8 +380,8 @@ export default function ScanPage() {
           }`}
         >
           {isCheckedOut
-            ? <><LogIn  className="w-4 h-4" /> นำคืน</>
-            : <><LogOut className="w-4 h-4" /> เบิกออก</>
+            ? <><LogIn  className="w-4 h-4" /> {t.scanCheckIn}</>
+            : <><LogOut className="w-4 h-4" /> {t.scanCheckOut}</>
           }
         </button>
       </div>
@@ -376,10 +397,10 @@ export default function ScanPage() {
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-sm text-gray-600 font-th">ชื่อผู้ดำเนินการ</label>
+              <label className="text-sm text-gray-600 font-th">{t.operatorName}</label>
               <Input
                 ref={inputRef}
-                placeholder="กรอกชื่อ-นามสกุล"
+                placeholder={t.operatorPlaceholder}
                 value={personName}
                 onChange={e => setPersonName(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSubmit()}
@@ -396,7 +417,7 @@ export default function ScanPage() {
               disabled={!personName.trim() || submitting}
               onClick={handleSubmit}
             >
-              {submitting ? "กำลังบันทึก…" : `ยืนยัน${actionLabel}`}
+              {submitting ? t.saving : t.confirmAction(actionLabel)}
             </Button>
           </div>
         </SheetContent>

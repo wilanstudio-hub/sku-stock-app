@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { isDemoMode } from "@/lib/demo/mode";
+import { currentTranslations } from "@/lib/uiText";
 
 export type Company = Database["public"]["Tables"]["companies"]["Row"];
 
@@ -53,6 +55,20 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [error, setError] = useState<string | null>(null);
 
   const resolveTenant = async () => {
+    if (isDemoMode()) {
+      setTenant({
+        id: "demo-company",
+        name: "Wilan Studio Demo",
+        slug: "demo",
+        created_at: "2026-01-01T00:00:00.000Z",
+      } as Company);
+      setTenantSlug("demo");
+      setIsApex(false);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -85,7 +101,7 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setError(fetchErr.message);
         setTenant(null);
       } else if (!data) {
-        setError(`ไม่พบสตูดิโอ "${slug}" ในระบบ`);
+        setError(currentTranslations().tenantNotFound(slug));
         setTenant(null);
       } else {
         setTenant(data as Company);

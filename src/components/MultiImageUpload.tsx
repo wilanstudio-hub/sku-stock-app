@@ -7,6 +7,7 @@ import { useLang } from "@/hooks/useLang";
 import { toast } from "sonner";
 import { compressImage } from "@/lib/compressImage";
 import { cn } from "@/lib/utils";
+import { isDemoMode } from "@/lib/demo/mode";
 
 async function waitForImageReady(url: string, attempts = [200, 500, 1000, 2000, 3000]): Promise<boolean> {
   for (let i = 0; i <= attempts.length; i++) {
@@ -48,6 +49,12 @@ export const MultiImageUpload = ({ values, onChange, max = 5 }: Props) => {
     setBusy(true);
     setLastCompression(null);
     try {
+      if (isDemoMode()) {
+        const uploaded = list.map((file) => URL.createObjectURL(file));
+        onChange([...values, ...uploaded]);
+        toast.success(t.uploadedMsg(uploaded.length));
+        return;
+      }
       const { data: session } = await supabase.auth.getSession();
       if (!session.session) {
         toast.error(t.signInToUpload);
@@ -102,6 +109,11 @@ export const MultiImageUpload = ({ values, onChange, max = 5 }: Props) => {
 
   const remove = async (idx: number) => {
     const url = values[idx];
+    if (url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+      onChange(values.filter((_, i) => i !== idx));
+      return;
+    }
     const m = url.match(/\/sku-images\/(.+)$/);
     if (m) await supabase.storage.from("sku-images").remove([m[1]]);
     onChange(values.filter((_, i) => i !== idx));
@@ -147,7 +159,7 @@ export const MultiImageUpload = ({ values, onChange, max = 5 }: Props) => {
         <div className="absolute inset-0 z-20 rounded-lg bg-primary/10 border-2 border-dashed border-primary flex flex-col items-center justify-center gap-2 pointer-events-none">
           <CloudUpload className="w-8 h-8 text-primary animate-bounce" />
           <p className="text-sm font-medium text-primary">
-            {lang === "th" ? "วางรูปที่นี่" : "Release to upload"}
+            {t.dropHere}
           </p>
         </div>
       )}
@@ -166,9 +178,7 @@ export const MultiImageUpload = ({ values, onChange, max = 5 }: Props) => {
           <CloudUpload className={cn("w-9 h-9", isDragActive ? "text-primary" : "text-muted-foreground/50")} />
           <div className="text-center space-y-1">
             <p className="text-sm font-medium text-foreground/80">
-              {isDragActive
-                ? (lang === "th" ? "วางรูปที่นี่" : "Drop images here")
-                : (lang === "th" ? "ลากรูปมาวางที่นี่ หรือคลิกเพื่อเลือก" : "Drop images here, or click to browse")}
+              {isDragActive ? t.dropImages : t.dropOrClick}
             </p>
             <p className="text-xs text-muted-foreground">{t.autoCompress} · {t.maxImages(max)}</p>
           </div>
@@ -245,7 +255,7 @@ export const MultiImageUpload = ({ values, onChange, max = 5 }: Props) => {
                 className="relative w-24 h-24 rounded-md overflow-hidden border border-border bg-muted group flex-shrink-0"
               >
                 <img
-                  src={uploadedAt[url] ? `${url}?t=${uploadedAt[url]}` : url}
+                  src={url.startsWith("blob:") || url.startsWith("data:") ? url : (uploadedAt[url] ? `${url}?t=${uploadedAt[url]}` : url)}
                   alt={`Image ${idx + 1}`}
                   className="w-full h-full object-cover"
                   loading="lazy"
@@ -304,9 +314,7 @@ export const MultiImageUpload = ({ values, onChange, max = 5 }: Props) => {
           {/* Drop-more hint when canAdd */}
           {canAdd && (
             <p className="text-xs text-muted-foreground/60">
-              {lang === "th"
-                ? `ลากรูปมาวางเพื่อเพิ่ม (เหลือ ${max - values.length} รูป)`
-                : `Drop images to add more (${max - values.length} remaining)`}
+              {t.dropMore(max - values.length)}
             </p>
           )}
         </div>

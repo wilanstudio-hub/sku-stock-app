@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Trash2, Edit2, Save, X } from "lucide-react";
+import { useLang } from "@/hooks/useLang";
+import { isDemoMode } from "@/lib/demo/mode";
 
 interface Props {
   open: boolean;
@@ -23,6 +25,7 @@ function extractSheetId(input: string): string {
 const PREFIX_RE = /^[A-Z0-9][A-Z0-9-]*-$/;
 
 export const ManageSheetsDialog = ({ open, onOpenChange, departmentCode, departmentName, onUpdated }: Props) => {
+  const { t } = useLang();
   const [sheets, setSheets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -35,6 +38,11 @@ export const ManageSheetsDialog = ({ open, onOpenChange, departmentCode, departm
 
   const load = async () => {
     setLoading(true);
+    if (isDemoMode()) {
+      setSheets([]);
+      setLoading(false);
+      return;
+    }
     const { data, error } = await supabase
       .from("google_sheets_registry")
       .select("*")
@@ -61,16 +69,16 @@ export const ManageSheetsDialog = ({ open, onOpenChange, departmentCode, departm
     e.preventDefault();
     const sheetId = extractSheetId(sheetInput);
     if (!sheetId) {
-      toast.error("กรุณาระบุ Google Sheet URL หรือ Sheet ID");
+      toast.error(t.sheetUrlRequired);
       return;
     }
     if (!name.trim()) {
-      toast.error("กรุณาระบุชื่อคลัง/ชีท");
+      toast.error(t.sheetNameRequired);
       return;
     }
     const prefix = skuPrefix.trim().toUpperCase();
     if (prefix && !PREFIX_RE.test(prefix)) {
-      toast.error('SKU Prefix ควรลงท้ายด้วยขีด เช่น "B-" หรือปล่อยว่างไว้สำหรับคลังหลัก');
+      toast.error(t.sheetPrefixHint);
       return;
     }
 
@@ -86,11 +94,11 @@ export const ManageSheetsDialog = ({ open, onOpenChange, departmentCode, departm
     if (editingId) {
       const { error } = await supabase.from("google_sheets_registry").update(payload).eq("id", editingId);
       if (error) toast.error(error.message);
-      else toast.success("อัปเดตลิงก์ชีทสำเร็จ");
+      else toast.success(t.sheetUpdated);
     } else {
       const { error } = await supabase.from("google_sheets_registry").insert(payload);
       if (error) toast.error(error.message);
-      else toast.success("เพิ่มลิงก์ชีทสำเร็จ");
+      else toast.success(t.sheetAdded);
     }
 
     setIsSaving(false);
@@ -100,11 +108,11 @@ export const ManageSheetsDialog = ({ open, onOpenChange, departmentCode, departm
   };
 
   const handleDelete = async (id: string, sheetName: string) => {
-    if (!confirm(`คุณต้องการลบการเชื่อมต่อชีท "${sheetName}" ใช่หรือไม่?\nข้อมูลสินค้าที่เคยซิงก์มาแล้วจะไม่ถูกลบ แต่จะไม่ถูกอัปเดตอีกต่อไป`)) return;
+    if (!confirm(t.sheetDeleteConfirm(sheetName))) return;
     const { error } = await supabase.from("google_sheets_registry").delete().eq("id", id);
     if (error) toast.error(error.message);
     else {
-      toast.success("ลบชีทสำเร็จ");
+      toast.success(t.sheetDeleted);
       load();
       onUpdated();
     }
@@ -121,22 +129,22 @@ export const ManageSheetsDialog = ({ open, onOpenChange, departmentCode, departm
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>จัดการ Google Sheets - {departmentName}</DialogTitle>
+          <DialogTitle>{t.sheetDialogTitle(departmentName)}</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-4 pt-2">
           {/* List existing sheets */}
           <div className="space-y-2">
             {loading ? (
-              <p className="text-sm text-muted-foreground">กำลังโหลด...</p>
+              <p className="text-sm text-muted-foreground">{t.loading}</p>
             ) : sheets.length === 0 ? (
-              <p className="text-sm text-muted-foreground p-4 text-center border rounded bg-accent/20">ยังไม่มีการเชื่อมต่อชีทในหมวดหมู่นี้</p>
+              <p className="text-sm text-muted-foreground p-4 text-center border rounded bg-accent/20">{t.sheetEmpty}</p>
             ) : sheets.map(s => (
               <div key={s.id} className="flex items-center justify-between p-3 border rounded bg-card">
                 <div className="overflow-hidden pr-2">
                   <div className="font-semibold flex items-center gap-2">
                     {s.name}
-                    {s.sku_prefix === "" && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">คลังหลัก</span>}
+                    {s.sku_prefix === "" && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">{t.sheetMainBadge}</span>}
                   </div>
                   <div className="text-xs text-muted-foreground truncate" title={s.sheet_id}>
                     ID: {s.sheet_id}
@@ -162,30 +170,30 @@ export const ManageSheetsDialog = ({ open, onOpenChange, departmentCode, departm
           <hr />
 
           <form onSubmit={handleSave} className="space-y-4 pt-2">
-            <h4 className="font-semibold">{editingId ? "แก้ไขการเชื่อมต่อ" : "เชื่อมต่อชีทใหม่"}</h4>
+            <h4 className="font-semibold">{editingId ? t.sheetEdit : t.sheetConnect}</h4>
             
             <div className="space-y-1.5">
-              <Label>ชื่อคลัง / คำอธิบาย *</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. คลังสาขา B" required />
+              <Label>{t.sheetNameLabel}</Label>
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder={t.sheetNamePlaceholder} required />
             </div>
 
             <div className="space-y-1.5">
-              <Label>Google Sheet URL หรือ Sheet ID *</Label>
+              <Label>{t.sheetUrlLabel}</Label>
               <Input value={sheetInput} onChange={e => setSheetInput(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." required />
             </div>
 
             <div className="space-y-1.5">
-              <Label>SKU Prefix Code (เว้นว่างไว้ถ้าเป็นคลังหลัก)</Label>
+              <Label>{t.sheetPrefixLabel}</Label>
               <Input value={skuPrefix} onChange={e => setSkuPrefix(e.target.value.toUpperCase())} placeholder="e.g. B-" className="font-mono" />
-              <p className="text-[10px] text-muted-foreground">ถ้ากรอก ตัวอย่างรหัสสินค้าจะเป็น: {skuPrefix || "PREFIX"}EQ-CAM-001</p>
+              <p className="text-[10px] text-muted-foreground">{t.sheetPrefixExample(skuPrefix)}</p>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
               {editingId && (
-                <Button type="button" variant="ghost" onClick={resetForm}>ยกเลิก</Button>
+                <Button type="button" variant="ghost" onClick={resetForm}>{t.cancel}</Button>
               )}
               <Button type="submit" disabled={isSaving} className="gap-2">
-                <Save className="w-4 h-4" /> {editingId ? "บันทึกการแก้ไข" : "เพิ่มลิงก์ชีท"}
+                <Save className="w-4 h-4" /> {editingId ? t.saveEdit : t.addSheetLink}
               </Button>
             </div>
           </form>

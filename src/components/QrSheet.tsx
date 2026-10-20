@@ -1,6 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import type { Sku } from "./SkuDialog";
+import type { Lang } from "@/lib/i18n";
+import { displayItemName, displayItemSubtitle, displayPlain, readLang } from "@/lib/uiText";
 
 export interface QrSheetHandle {
   printItems(items: Sku[]): void;
@@ -23,23 +25,27 @@ export function openPrintWindow(): Window | null {
 // Writes the actual label sheet into an already-open window. Safe to call
 // later/async (e.g. after canvases finish drawing) since the window handle
 // already exists — only the window.open() call itself is gesture-gated.
-export function writePrintDocument(w: Window, items: Sku[], qrRefs: Map<string, HTMLCanvasElement>) {
+export function writePrintDocument(w: Window, items: Sku[], qrRefs: Map<string, HTMLCanvasElement>, lang: Lang = readLang()) {
   const cells = items.map((s) => {
     const canvas = qrRefs.get(s.id!);
     const dataUrl = canvas?.toDataURL("image/png") ?? "";
     const dept = DEPT_LABEL[s.department] ?? s.department;
-    const cat = s.category ? ` · ${s.category}` : "";
+    const category = displayPlain(s.category, lang);
+    const location = displayPlain(s.location, lang);
+    const primary = displayItemName(s, lang);
+    const secondary = displayItemSubtitle(s, lang);
+    const cat = category ? ` · ${category}` : "";
     return `
       <div class="cell">
-        <div class="header">SKU &nbsp; STOCK</div>
+        <div class="header">Ctrl+ Inventory</div>
         <hr>
         <img class="qr" src="${dataUrl}" alt="QR">
         <hr>
         <div class="sku">${esc(s.sku_code)}</div>
-        <div class="name-th">${esc(s.name_th)}</div>
-        <div class="name-en">${esc(s.name_en)}</div>
+        <div class="name-th">${esc(primary)}</div>
+        ${secondary ? `<div class="name-en">${esc(secondary)}</div>` : ""}
         <div class="dept">${esc(dept + cat)}</div>
-        ${s.location ? `<div class="location"><span class="loc-key">LOC &nbsp;</span>${esc(s.location)}</div>` : ""}
+        ${location ? `<div class="location"><span class="loc-key">LOC &nbsp;</span>${esc(location)}</div>` : ""}
       </div>`;
   }).join("");
 
@@ -118,7 +124,7 @@ export const QrSheet = forwardRef<QrSheetHandle, object>((_props, ref) => {
     const w = pendingWindowRef.current;
     pendingWindowRef.current = null;
     if (w) {
-      writePrintDocument(w, printQueue, qrRefs.current);
+      writePrintDocument(w, printQueue, qrRefs.current, readLang());
       w.document.close();
     }
     setPrintQueue(null);

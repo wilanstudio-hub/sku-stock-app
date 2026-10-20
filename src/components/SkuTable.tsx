@@ -20,6 +20,9 @@ import { DryRunDialog, DryRunResult } from "./DryRunDialog";
 import { SyncHistoryDialog } from "./SyncHistoryDialog";
 import { TransactionHistoryDialog } from "./TransactionHistoryDialog";
 import { toast } from "sonner";
+import { isDemoMode } from "@/lib/demo/mode";
+import { demoCheck, demoSimulateSync, demoSkus, demoSyncPreview } from "@/lib/demo/catalog";
+import { displayItemName, displayItemSubtitle, displayPlain, displayUnit, formatStamp } from "@/lib/uiText";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -40,16 +43,6 @@ function normCat(s: string): string {
 // from a category label, for use as a sku_code fallback filter.
 function skuPfxHint(cat: string): string {
   return cat.replace(/[^A-Za-z]/g, "").substring(0, 4).toUpperCase();
-}
-
-function formatDateTime(iso: string) {
-  const d    = new Date(iso);
-  const dd   = String(d.getDate()).padStart(2, "0");
-  const mm   = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  const hh   = String(d.getHours()).padStart(2, "0");
-  const min  = String(d.getMinutes()).padStart(2, "0");
-  return `${dd}/${mm}/${yyyy} - ${hh}:${min} น.`;
 }
 
 const galleryImages = (i: Sku & { image_urls?: string[] | null }): string[] => {
@@ -133,6 +126,16 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
   };
 
   const handleSync = async () => {
+    if (isDemoMode()) {
+      setSyncing(true);
+      const toastId = toast.loading(t.syncingMsg);
+      const data = demoSimulateSync(department, lang);
+      toast.success(t.syncSuccess(data.inserted, data.updated), { id: toastId, description: data.detail });
+      setSyncRefresh((n) => n + 1);
+      load();
+      setSyncing(false);
+      return;
+    }
     setSyncing(true);
     const toastId = toast.loading(t.syncingMsg);
     try {
@@ -158,6 +161,18 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
   const handleDryRun = async () => {
     if (!editable) {
       toast.error(t.needPermission);
+      return;
+    }
+    if (isDemoMode()) {
+      const data = demoSyncPreview(department, lang);
+      setDryRunResult({
+        inserted: data.inserted,
+        updated: data.updated,
+        perTab: data.perTab,
+        errors: data.errors,
+      });
+      setDryRunLoading(false);
+      setDryRunOpen(true);
       return;
     }
     setDryRunOpen(true);
@@ -202,6 +217,19 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
     if (!checkoutSku || !personName.trim()) return;
     setCheckSubmitting(true);
     const nextStatus = checkAction === "check_out" ? "check_out" : "available";
+    if (isDemoMode()) {
+      demoCheck(checkoutSku.sku_code, checkAction, personName.trim(), lang);
+      toast.success(
+        checkAction === "check_out"
+          ? t.checkoutOutToast(displayItemName(checkoutSku, lang))
+          : t.checkoutInToast(displayItemName(checkoutSku, lang)),
+      );
+      setCheckoutSku(null);
+      setPersonName("");
+      setCheckSubmitting(false);
+      load();
+      return;
+    }
     const [txRes, skuRes] = await Promise.all([
       supabase.from("sku_transactions").insert({
         sku_code:    checkoutSku.sku_code,
@@ -219,8 +247,8 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
     } else {
       toast.success(
         checkAction === "check_out"
-          ? `📤 เบิก "${checkoutSku.name_th}" ออกแล้ว`
-          : `📥 รับคืน "${checkoutSku.name_th}" แล้ว`,
+          ? t.checkoutOutToast(displayItemName(checkoutSku, lang))
+          : t.checkoutInToast(displayItemName(checkoutSku, lang)),
       );
       setCheckoutSku(null);
       setPersonName("");
@@ -231,6 +259,12 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
 
   const load = async () => {
     setLoading(true);
+    if (isDemoMode()) {
+      const rows = demoSkus(lang).filter((s) => s.department === department);
+      setItems(skuPrefix !== undefined ? rows.filter((s) => s.sku_code.startsWith(`${skuPrefix}EQ-`)) : rows);
+      setLoading(false);
+      return;
+    }
     const all: Sku[] = [];
     for (let from = 0; ; from += 1000) {
       let req = supabase
@@ -258,7 +292,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
     setCategoryFilter("all");
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [department, skuPrefix, enabled]);
+  }, [department, skuPrefix, enabled, lang]);
 
   const categories = useMemo(
     () => Array.from(new Set(items.map((i) => i.category).filter(Boolean) as string[])).sort(),
@@ -462,7 +496,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
             <span className="hidden sm:inline">{t.historyBtn}</span>
           </Button>
         )}
-        <Button onClick={() => setTxLogOpen(true)} variant="outline" className="gap-1" title="ประวัติการเบิก-คืน">
+        <Button onClick={() => setTxLogOpen(true)} variant="outline" className="gap-1" title={t.historyLogTitle}>
           <ClipboardList className="w-4 h-4" />
           <span className="hidden sm:inline font-th">History / Log</span>
         </Button>
@@ -502,7 +536,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
               onClick={() => handlePrintLabels(selectedItems)}
               className="flex items-center gap-2 px-3 py-1 bg-white border rounded"
             >
-              <Printer className="w-4 h-4" /> พิมพ์
+              <Printer className="w-4 h-4" /> {t.printPdf}
             </button>
             {editable && (
               <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
@@ -532,7 +566,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
                 <TableHead>{t.locationCol}</TableHead>
                 <TableHead className="text-right">{t.qtyCol}</TableHead>
                 <TableHead>{t.statusCol}</TableHead>
-                <TableHead className="min-w-[140px]">ผู้ดำเนินการ / วันเวลา</TableHead>
+                <TableHead className="min-w-[140px]">{t.operatorCol}</TableHead>
                 <TableHead className="w-32 text-right">{t.actionsCol}</TableHead>
               </TableRow>
             </TableHeader>
@@ -564,7 +598,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
                             type="button"
                             onClick={() => setGallery({ images: imgs, alt: i.name_en })}
                             className="relative w-12 h-12 p-0 flex-shrink-0 rounded overflow-hidden border hover:ring-2 hover:ring-primary transition focus:outline-none focus:ring-2 focus:ring-primary"
-                            aria-label={`ดูรูป / View images ${i.sku_code}`}
+                            aria-label={t.viewImages(i.sku_code)}
                           >
                             <img
                               src={cover}
@@ -588,13 +622,15 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
                     </TableCell>
                     <TableCell className="font-mono font-medium">{i.sku_code}</TableCell>
                     <TableCell>
-                      <div className="font-th font-medium">{i.name_th}</div>
-                      <div className="text-xs text-muted-foreground">{i.name_en}</div>
+                      <div className="font-th font-medium">{displayItemName(i, lang)}</div>
+                      {displayItemSubtitle(i, lang) && (
+                        <div className="text-xs text-muted-foreground">{displayItemSubtitle(i, lang)}</div>
+                      )}
                     </TableCell>
-                    <TableCell className="text-sm">{i.category || "—"}</TableCell>
-                    <TableCell className="text-sm">{i.location || "—"}</TableCell>
+                    <TableCell className="text-sm">{displayPlain(i.category, lang) || "—"}</TableCell>
+                    <TableCell className="text-sm">{displayPlain(i.location, lang) || "—"}</TableCell>
                     <TableCell className="text-right font-semibold">
-                      {i.quantity.toLocaleString()} <span className="text-xs text-muted-foreground font-normal">{i.unit}</span>
+                      {(lang === "en" ? i.quantity.toLocaleString("en-US") : i.quantity.toLocaleString())} <span className="text-xs text-muted-foreground font-normal">{displayUnit(i.unit, lang)}</span>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1 items-start">
@@ -614,13 +650,13 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
                     <TableCell>
                       {i.current_status === "check_out" && i.last_handler ? (
                         <div>
-                          <p className="text-sm font-semibold font-th leading-snug">{i.last_handler}</p>
-                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{formatDateTime(i.updated_at!)}</p>
+                          <p className="text-sm font-semibold font-th leading-snug">{displayPlain(i.last_handler, lang) || "—"}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{formatStamp(i.updated_at!, lang)}</p>
                         </div>
                       ) : i.last_handler ? (
                         <div>
-                          <p className="text-xs text-muted-foreground font-th leading-snug">คืนโดย: {i.last_handler}</p>
-                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{formatDateTime(i.updated_at!)}</p>
+                          <p className="text-xs text-muted-foreground font-th leading-snug">{t.returnedBy(displayPlain(i.last_handler, lang) || "—")}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{formatStamp(i.updated_at!, lang)}</p>
                         </div>
                       ) : (
                         <span className="text-muted-foreground text-sm">—</span>
@@ -639,9 +675,9 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
                               setCheckAction("check_out");
                               setPersonName("");
                             }}
-                            title="เบิกออก"
+                            title={t.scanCheckOut}
                           >
-                            📤 เบิกออก
+                            {t.checkOutBtn}
                           </Button>
                         ) : (
                           <Button
@@ -653,9 +689,9 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
                               setCheckAction("check_in");
                               setPersonName("");
                             }}
-                            title="รับคืน"
+                            title={t.checkInTitle}
                           >
-                            📥 รับคืน
+                            {t.checkInBtn}
                           </Button>
                         )}
                         <Button size="icon" variant="ghost" onClick={() => setQrSku(i)} title="QR Code">
@@ -685,7 +721,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
       {totalPages > 1 && (
         <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
           <span>
-            แสดง {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} จาก {filtered.length} รายการ
+            {t.paginationRange(page * PAGE_SIZE + 1, Math.min((page + 1) * PAGE_SIZE, filtered.length), filtered.length)}
           </span>
           <div className="flex items-center gap-1">
             <Button
@@ -694,7 +730,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
               disabled={page === 0}
               onClick={() => setPage((p) => p - 1)}
             >
-              ← ก่อนหน้า
+              {t.prevPage}
             </Button>
             <span className="px-2 tabular-nums">
               {page + 1} / {totalPages}
@@ -705,7 +741,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
               disabled={page >= totalPages - 1}
               onClick={() => setPage((p) => p + 1)}
             >
-              ถัดไป →
+              {t.nextPage}
             </Button>
           </div>
         </div>
@@ -729,21 +765,21 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="font-th">
-              {checkAction === "check_out" ? "📤 เบิกออก" : "📥 รับคืน"}
+              {checkAction === "check_out" ? t.checkOutBtn : t.checkInBtn}
             </DialogTitle>
           </DialogHeader>
           {checkoutSku && (
             <div className="space-y-4 pt-1">
               <div className="rounded-md bg-muted px-3 py-2 text-sm">
-                <p className="font-medium font-th leading-snug">{checkoutSku.name_th}</p>
+                <p className="font-medium font-th leading-snug">{displayItemName(checkoutSku, lang)}</p>
                 <p className="font-mono text-xs text-muted-foreground mt-0.5">{checkoutSku.sku_code}</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="font-th text-sm">
-                  ชื่อผู้{checkAction === "check_out" ? "เบิก" : "นำคืน"} *
+                  {checkAction === "check_out" ? t.borrowerLabel : t.returnerLabel}
                 </Label>
                 <Input
-                  placeholder="ระบุชื่อ…"
+                  placeholder={t.namePlaceholder}
                   value={personName}
                   onChange={(e) => setPersonName(e.target.value)}
                   onKeyDown={(e) => {
@@ -759,7 +795,7 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => { setCheckoutSku(null); setPersonName(""); }}>
-              ยกเลิก
+              {t.cancel}
             </Button>
             <Button
               onClick={handleNameSubmit}
@@ -771,10 +807,10 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
               }
             >
               {checkSubmitting
-                ? "กำลังบันทึก…"
+                ? t.saving
                 : checkAction === "check_out"
-                ? "ยืนยันเบิกออก"
-                : "ยืนยันรับคืน"}
+                ? t.confirmCheckOut
+                : t.confirmCheckIn}
             </Button>
           </DialogFooter>
         </DialogContent>

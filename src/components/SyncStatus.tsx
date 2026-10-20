@@ -4,6 +4,8 @@ import { useLang } from "@/hooks/useLang";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { History, RefreshCw } from "lucide-react";
+import { isDemoMode } from "@/lib/demo/mode";
+import { demoSyncLog } from "@/lib/demo/catalog";
 
 interface SyncLog {
   id: string;
@@ -29,6 +31,11 @@ export const SyncStatus = ({ department, refreshKey, compact }: Props) => {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      if (isDemoMode()) {
+        setLog(demoSyncLog(department));
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       const { data } = await supabase
         .from("sync_logs")
