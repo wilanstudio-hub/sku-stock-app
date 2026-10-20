@@ -190,38 +190,137 @@ export const DEMO_ZONES: DemoZone[] = [
 
 const overrides = new Map<string, { status: "available" | "check_out"; handler_th: string | null; handler_en: string | null }>();
 const extraTx: TxSeed[] = [];
+const patches = new Map<string, Sku>();
+const added: Sku[] = [];
+let addSeq = 1;
+
+export interface DemoSyncLog {
+  id: string;
+  department: string;
+  inserted: number;
+  updated: number;
+  per_category: Record<string, { inserted: number; updated: number }>;
+  errors: string[];
+  created_at: string;
+}
+
+const demoSyncLogs = new Map<string, DemoSyncLog>();
+
+function projectSeed(s: SkuSeed, lang: Lang): Sku {
+  const over = overrides.get(s.sku_code);
+  const status = over?.status ?? s.current_status;
+  const handlerTh = over ? over.handler_th : s.handler_th;
+  const handlerEn = over ? over.handler_en : s.handler_en;
+  const nameEn = s.name_en;
+  return {
+    id: s.id,
+    company_id: COMPANY,
+    department: s.department,
+    sku_code: s.sku_code,
+    name_th: lang === "en" ? nameEn : s.name_th,
+    name_en: nameEn,
+    category: lang === "en" ? s.category_en : s.category_th,
+    location: lang === "en" ? s.location_en : s.location_th,
+    quantity: s.quantity,
+    unit: lang === "en" ? s.unit_en : s.unit_th,
+    min_stock: 1,
+    image_url: null,
+    image_urls: null,
+    notes_th: lang === "en" ? s.notes_en : s.notes_th,
+    notes_en: s.notes_en,
+    color: null,
+    special_features: null,
+    style: null,
+    availability: s.availability,
+    current_status: status,
+    last_handler: lang === "en" ? handlerEn : handlerTh,
+    updated_at: "2026-10-18T09:24:00.000Z",
+  };
+}
+
+function applyLiveStatus(sku: Sku, lang: Lang): Sku {
+  const over = overrides.get(sku.sku_code);
+  if (!over) return sku;
+  return {
+    ...sku,
+    current_status: over.status,
+    last_handler: lang === "en" ? over.handler_en : over.handler_th,
+  };
+}
 
 export function demoSkus(lang: Lang): Sku[] {
-  return SKUS.map((s) => {
-    const over = overrides.get(s.sku_code);
-    const status = over?.status ?? s.current_status;
-    const handlerTh = over ? over.handler_th : s.handler_th;
-    const handlerEn = over ? over.handler_en : s.handler_en;
-    return {
-      id: s.id,
-      company_id: COMPANY,
-      department: s.department,
-      sku_code: s.sku_code,
-      name_th: s.name_th,
-      name_en: s.name_en,
-      category: lang === "en" ? s.category_en : s.category_th,
-      location: lang === "en" ? s.location_en : s.location_th,
-      quantity: s.quantity,
-      unit: lang === "en" ? s.unit_en : s.unit_th,
-      min_stock: 1,
-      image_url: null,
-      image_urls: null,
-      notes_th: lang === "en" ? s.notes_en : s.notes_th,
-      notes_en: s.notes_en,
-      color: null,
-      special_features: null,
-      style: null,
-      availability: s.availability,
-      current_status: status,
-      last_handler: lang === "en" ? handlerEn : handlerTh,
-      updated_at: "2026-10-18T09:24:00.000Z",
-    };
+  const seeds = SKUS.map((s) => {
+    const projected = projectSeed(s, lang);
+    const patch = patches.get(s.id);
+    return applyLiveStatus(patch ? { ...projected, ...patch, id: s.id } : projected, lang);
   });
+  return [...seeds, ...added.map((s) => applyLiveStatus(s, lang))];
+}
+
+export function demoUpsertSku(input: Sku): Sku {
+  const id = input.id || `sku-added-${addSeq++}`;
+  const imgs = input.image_urls ?? [];
+  const saved: Sku = {
+    ...input,
+    id,
+    company_id: input.company_id || COMPANY,
+    image_urls: imgs,
+    image_url: imgs[0] ?? input.image_url ?? null,
+    quantity: Number(input.quantity) || 0,
+    min_stock: Number(input.min_stock) || 0,
+    current_status: input.current_status ?? "available",
+  };
+  if (SKUS.some((s) => s.id === id)) patches.set(id, saved);
+  else {
+    const idx = added.findIndex((s) => s.id === id);
+    if (idx >= 0) added[idx] = saved;
+    else added.push(saved);
+  }
+  return saved;
+}
+
+export function demoSyncPreview(department: string, lang: Lang) {
+  const rows = demoSkus(lang).filter((s) => s.department === department);
+  const perTab: Record<string, { inserted: number; updated: number }> = {};
+  for (const row of rows) {
+    const cat = (row.category || "General").trim() || "General";
+    const slot = perTab[cat] ?? { inserted: 0, updated: 0 };
+    slot.updated += 1;
+    perTab[cat] = slot;
+  }
+  const updated = rows.length;
+  const detail = Object.entries(perTab)
+    .map(([k, v]) => `${k}: +${v.inserted} / ~${v.updated}`)
+    .join(", ");
+  return { inserted: 0, updated, perTab, errors: [] as string[], detail };
+}
+
+export function demoSimulateSync(department: string, lang: Lang) {
+  const preview = demoSyncPreview(department, lang);
+  const log: DemoSyncLog = {
+    id: `demo-sync-${department}`,
+    department,
+    inserted: preview.inserted,
+    updated: preview.updated,
+    per_category: preview.perTab,
+    errors: [],
+    created_at: new Date().toISOString(),
+  };
+  demoSyncLogs.set(department, log);
+  return { ...preview, log };
+}
+
+export function demoSyncLog(department: string): DemoSyncLog | null {
+  return demoSyncLogs.get(department) ?? null;
+}
+
+export function resetDemoRuntime() {
+  overrides.clear();
+  extraTx.length = 0;
+  patches.clear();
+  added.length = 0;
+  addSeq = 1;
+  demoSyncLogs.clear();
 }
 
 export function demoSkuByCode(code: string, lang: Lang): Sku | null {
@@ -247,7 +346,7 @@ export function demoCheck(skuCode: string, action: "check_out" | "check_in", per
     handler_th: handler,
     handler_en: handler,
   });
-  const sku = SKUS.find((s) => s.sku_code === skuCode);
+  const sku = SKUS.find((s) => s.sku_code === skuCode) ?? added.find((s) => s.sku_code === skuCode);
   extraTx.push({
     id: `tx-live-${extraTx.length + 1}`,
     sku_code: skuCode,

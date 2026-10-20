@@ -7,6 +7,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, History, AlertTriangle } from "lucide-react";
+import { isDemoMode } from "@/lib/demo/mode";
+import { demoSyncLog } from "@/lib/demo/catalog";
 
 interface SyncLog {
   id: string;
@@ -35,6 +37,14 @@ export const SyncHistoryDialog = ({ open, onOpenChange, department }: Props) => 
     let cancelled = false;
     const load = async () => {
       setLoading(true);
+      if (isDemoMode()) {
+        const log = demoSyncLog(department);
+        if (!cancelled) {
+          setLogs(log ? [log] : []);
+          setLoading(false);
+        }
+        return;
+      }
       const { data } = await supabase
         .from("sync_logs")
         .select("*")

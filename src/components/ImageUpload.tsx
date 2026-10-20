@@ -5,6 +5,7 @@ import { Camera, Upload, X, Image as ImageIcon } from "lucide-react";
 import { useLang } from "@/hooks/useLang";
 import { toast } from "sonner";
 import { compressImage } from "@/lib/compressImage";
+import { isDemoMode } from "@/lib/demo/mode";
 
 interface Props {
   value: string | null;
@@ -23,6 +24,11 @@ export const ImageUpload = ({ value, onChange }: Props) => {
     setBusy(true);
     setCompression(null);
     try {
+      if (isDemoMode()) {
+        onChange(URL.createObjectURL(file));
+        toast.success(t.uploadedMsg(1));
+        return;
+      }
       const { data: session } = await supabase.auth.getSession();
       if (!session.session) {
         toast.error(t.signInToUpload);
@@ -49,6 +55,12 @@ export const ImageUpload = ({ value, onChange }: Props) => {
 
   const remove = async () => {
     if (!value) return;
+    if (value.startsWith("blob:")) {
+      URL.revokeObjectURL(value);
+      onChange(null);
+      setCompression(null);
+      return;
+    }
     const m = value.match(/\/sku-images\/(.+)$/);
     if (m) await supabase.storage.from("sku-images").remove([m[1]]);
     onChange(null);

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Download, Printer } from "lucide-react";
 import { toast } from "sonner";
 import type { Sku } from "./SkuDialog";
+import { displayItemName, displayItemSubtitle, displayPlain } from "@/lib/uiText";
 
 interface Props {
   open: boolean;
@@ -21,14 +22,18 @@ function clamp(s: string, max: number) {
 
 export const QrDialog = ({ open, onOpenChange, sku }: Props) => {
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
-  const { t } = useLang();
+  const { t, lang } = useLang();
 
   if (!sku) return null;
 
   // Encode the scan-page URL so any camera app opens the product page directly.
   const payload = `${window.location.origin}/scan?sku=${encodeURIComponent(sku.sku_code)}`;
 
-  const deptText = `${DEPT_LABEL[sku.department] ?? sku.department}${sku.category ? " · " + sku.category : ""}`;
+  const primaryName = displayItemName(sku, lang);
+  const secondaryName = displayItemSubtitle(sku, lang);
+  const locationText = displayPlain(sku.location, lang);
+  const categoryText = displayPlain(sku.category, lang);
+  const deptText = `${DEPT_LABEL[sku.department] ?? sku.department}${categoryText ? " · " + categoryText : ""}`;
 
   const savePng = async () => {
     const qrEl = qrCanvasRef.current;
@@ -36,9 +41,9 @@ export const QrDialog = ({ open, onOpenChange, sku }: Props) => {
 
     await document.fonts.ready;
 
-    const locationText = sku.location ?? null;
     const QR = 240, PAD = 22, W = QR + PAD * 2;
-    const H = PAD + 14 + 10 + QR + 12 + 20 + 18 + 16 + 15 + 14 + (locationText ? 13 : 0) + PAD;
+    const nameLines = 16 + (secondaryName ? 15 : 0);
+    const H = PAD + 14 + 10 + QR + 12 + 20 + 18 + nameLines + 14 + (locationText ? 13 : 0) + PAD;
     const SCALE = 3;
 
     const canvas = document.createElement("canvas");
@@ -85,17 +90,17 @@ export const QrDialog = ({ open, onOpenChange, sku }: Props) => {
     ctx.fillText(sku.sku_code, W / 2, y);
     y += 18;
 
-    // name TH
     ctx.fillStyle = "#1f2937";
     ctx.font = "12px 'Sarabun', sans-serif";
-    ctx.fillText(clamp(sku.name_th, 30), W / 2, y);
+    ctx.fillText(clamp(primaryName, 36), W / 2, y);
     y += 16;
 
-    // name EN
-    ctx.fillStyle = "#6b7280";
-    ctx.font = "11px sans-serif";
-    ctx.fillText(clamp(sku.name_en, 36), W / 2, y);
-    y += 15;
+    if (secondaryName) {
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "11px sans-serif";
+      ctx.fillText(clamp(secondaryName, 36), W / 2, y);
+      y += 15;
+    }
 
     // dept · category
     ctx.fillStyle = "#9ca3af";
@@ -181,9 +186,9 @@ export const QrDialog = ({ open, onOpenChange, sku }: Props) => {
     <img class="qr" src="${qrDataUrl}" alt="QR Code">
     <hr>
     <div class="sku">${sku.sku_code}</div>
-    <div class="name-th">${sku.name_th}</div>
-    <div class="name-en">${sku.name_en}</div>
-    ${sku.location ? `<div class="location"><span class="loc-key">LOC &nbsp;</span>${sku.location}</div>` : ""}
+    <div class="name-th">${primaryName}</div>
+    ${secondaryName ? `<div class="name-en">${secondaryName}</div>` : ""}
+    ${locationText ? `<div class="location"><span class="loc-key">LOC &nbsp;</span>${locationText}</div>` : ""}
     <div class="dept">${deptText}</div>
   </div>
   <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 500); }</script>
@@ -213,15 +218,17 @@ export const QrDialog = ({ open, onOpenChange, sku }: Props) => {
               {sku.sku_code}
             </p>
             <p className="text-[12px] font-th text-foreground/80 mt-1 leading-snug">
-              {sku.name_th}
+              {primaryName}
             </p>
-            <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-              {sku.name_en}
-            </p>
-            {sku.location && (
+            {secondaryName && (
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                {secondaryName}
+              </p>
+            )}
+            {locationText && (
               <p className="font-mono text-[11px] font-bold text-foreground mt-2 pt-2 border-t border-border leading-snug print:text-black print:font-bold">
                 <span className="text-[9px] font-normal text-muted-foreground mr-1 print:text-black">LOC</span>
-                {sku.location}
+                {locationText}
               </p>
             )}
             <p className="text-[10px] text-muted-foreground/60 mt-1.5">

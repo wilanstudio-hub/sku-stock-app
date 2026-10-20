@@ -10,6 +10,9 @@ import { MultiImageUpload } from "./MultiImageUpload";
 import { SyncStatus } from "./SyncStatus";
 import { useLang } from "@/hooks/useLang";
 import { toast } from "sonner";
+import { isDemoMode } from "@/lib/demo/mode";
+import { demoSkus, demoUpsertSku } from "@/lib/demo/catalog";
+import { readLang } from "@/lib/uiText";
 
 const OTHER_SENTINEL = "__other__";
 
@@ -129,14 +132,20 @@ const buildSkuCode = async (
   style: string
 ): Promise<string> => {
   const base = `${dept.toUpperCase()}-${prefix3(category)}-${prefix3(color)}-${prefix3(style)}`;
-  const { data } = await supabase
-    .from("skus")
-    .select("sku_code")
-    .eq("department", dept)
-    .like("sku_code", `${base}-%`);
+  let codes: string[] = [];
+  if (isDemoMode()) {
+    codes = demoSkus(readLang()).filter((s) => s.department === dept).map((s) => s.sku_code);
+  } else {
+    const { data } = await supabase
+      .from("skus")
+      .select("sku_code")
+      .eq("department", dept)
+      .like("sku_code", `${base}-%`);
+    codes = (data ?? []).map((r: { sku_code: string }) => r.sku_code);
+  }
   let max = 0;
-  (data ?? []).forEach((r: { sku_code: string }) => {
-    const m = r.sku_code.match(new RegExp(`^${base}-(\\d+)$`));
+  codes.forEach((code) => {
+    const m = code.match(new RegExp(`^${base}-(\\d+)$`));
     if (m) max = Math.max(max, parseInt(m[1], 10));
   });
   return `${base}-${String(max + 1).padStart(3, "0")}`;
@@ -153,6 +162,18 @@ export const SkuDialog = ({ open, onOpenChange, department, initial, onSaved }: 
   // Load unique category values for this department from the DB whenever the dialog opens.
   useEffect(() => {
     if (!open) return;
+    if (isDemoMode()) {
+      const unique = Array.from(
+        new Set(
+          demoSkus(lang)
+            .filter((s) => s.department === department)
+            .map((s) => s.category)
+            .filter(Boolean),
+        ),
+      ).sort() as string[];
+      setDbCategories(unique);
+      return;
+    }
     supabase
       .from("skus")
       .select("category")
@@ -163,7 +184,7 @@ export const SkuDialog = ({ open, onOpenChange, department, initial, onSaved }: 
         ).sort() as string[];
         setDbCategories(unique);
       });
-  }, [open, department]);
+  }, [open, department, lang]);
 
   useEffect(() => {
     if (!open) return;
@@ -195,6 +216,14 @@ export const SkuDialog = ({ open, onOpenChange, department, initial, onSaved }: 
       // keep legacy image_url in sync with cover (first image) for backwards compat
       image_url: imgs[0] ?? null,
     };
+    if (isDemoMode()) {
+      demoUpsertSku(payload);
+      setSaving(false);
+      toast.success(t.savedSuccess);
+      onSaved();
+      onOpenChange(false);
+      return;
+    }
     const { error } = form.id
       ? await supabase.from("skus").update(payload).eq("id", form.id)
       : await supabase.from("skus").insert(payload);

@@ -21,7 +21,7 @@ import { SyncHistoryDialog } from "./SyncHistoryDialog";
 import { TransactionHistoryDialog } from "./TransactionHistoryDialog";
 import { toast } from "sonner";
 import { isDemoMode } from "@/lib/demo/mode";
-import { demoCheck, demoSkus } from "@/lib/demo/catalog";
+import { demoCheck, demoSimulateSync, demoSkus, demoSyncPreview } from "@/lib/demo/catalog";
 import { displayItemName, displayItemSubtitle, displayPlain, displayUnit, formatStamp } from "@/lib/uiText";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
@@ -126,6 +126,16 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
   };
 
   const handleSync = async () => {
+    if (isDemoMode()) {
+      setSyncing(true);
+      const toastId = toast.loading(t.syncingMsg);
+      const data = demoSimulateSync(department, lang);
+      toast.success(t.syncSuccess(data.inserted, data.updated), { id: toastId, description: data.detail });
+      setSyncRefresh((n) => n + 1);
+      load();
+      setSyncing(false);
+      return;
+    }
     setSyncing(true);
     const toastId = toast.loading(t.syncingMsg);
     try {
@@ -151,6 +161,18 @@ export const SkuTable = ({ department, skuPrefix, sheetId, lockedCategory, subNa
   const handleDryRun = async () => {
     if (!editable) {
       toast.error(t.needPermission);
+      return;
+    }
+    if (isDemoMode()) {
+      const data = demoSyncPreview(department, lang);
+      setDryRunResult({
+        inserted: data.inserted,
+        updated: data.updated,
+        perTab: data.perTab,
+        errors: data.errors,
+      });
+      setDryRunLoading(false);
+      setDryRunOpen(true);
       return;
     }
     setDryRunOpen(true);
